@@ -1,0 +1,14 @@
+{
+  "name": "magistrska-naloga-martin-staric",
+  "version": "1.0.0",
+  "description": "Magistrska naloga - Volumetrične eksplozije",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Martin Starič",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
