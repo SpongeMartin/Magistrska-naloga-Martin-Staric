@@ -5,7 +5,7 @@ Implementiramo simulacijo tekočin na podlagi [StamFluidforGames.pdf](http://gra
 
 - [x] Advection for density
 - [🛠] Velocity updating
-- [x] Defusion for pressure
+- [x] Diffusion for pressure
 - [ ] Pressure projection
 - [ ] Connect shaders and render
 - [🛠] Conditions for explosions

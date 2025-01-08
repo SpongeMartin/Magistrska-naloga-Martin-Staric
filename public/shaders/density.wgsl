@@ -3,6 +3,32 @@
 @group(0) @binding(2) var<uniform> gridSize : u32;
 @group(0) @binding(3) var<uniform> dt : f32;
 
+fn diffuse(x: u32, y: u32) -> f32 {
+    if (x >= gridSize || y >= gridSize) {
+        return 0.0;
+    }
+
+    // Calculate index based on global x, y
+    let idx = y * gridSize + x;
+
+    // Handle boundary conditions (for simplicity, just return current value)
+    if (x == 0u || y == 0u || x == gridSize - 1u || y == gridSize - 1u) {
+        return density[idx];
+    }
+
+    let left = idx - 1u;
+    let right = idx + 1u;
+    let up = idx - gridSize;
+    let down = idx + gridSize;
+
+    let diffusionRate = 0.25;
+    let newDensity = (density[left] + density[right] + density[up] + density[down]) * diffusionRate;
+
+    let result = newDensity + density[idx] * (1.0 * diffusionRate);
+
+    return result;
+}
+
 fn sample_density_at(position: vec2<f32>) -> f32 {
     // Bilinear interpolation
     let x0 = floor(position.x);
@@ -28,12 +54,14 @@ fn sample_density_at(position: vec2<f32>) -> f32 {
     let d0 = mix(d00, d10, tx);
     let d1 = mix(d01, d11, tx);
 
-    return mix(d0, d1, ty);;
+    return mix(d0, d1, ty);
 }
 
 @compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
+    // Diffuse disperses density among neighbouring tiles
     // Advection is computed implicitly, meaning we take the velocities of closest 4 points from previous position and apply it to the quantity, in our case density.
+
     let x = global_id.x;
     let y = global_id.y;
 
@@ -43,11 +71,12 @@ fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
 
     let idx = y * gridSize + x;
     let vel = velocity[idx];
-
     let prevPos = vec2<f32>(f32(x), f32(y)) - vel * dt;
 
-    // Sample the previous position of the density (with bilinear interpolation)
-    let newDensity = sample_density_at(prevPos);
+    let advectedDensity = sample_density_at(prevPos);
 
-    density[idx] = newDensity;
+    // Sample the previous position of the density (with bilinear interpolation)
+    let diffusedDensity = diffuse(x, y);
+
+    density[idx] = (advectedDensity + diffusedDensity) * 0.5;
 }
