@@ -1,151 +1,98 @@
-async function loadShader(filePath) {
-  const response = await fetch(filePath);
-  if (!response.ok) {
-    throw new Error(`Failed to load shader: ${filePath}`);
-  }
-  return await response.text();
-}
+import { initialize } from './init.js';
 
-const computeShaderCode = await loadShader('/shaders/compute.wgsl');
-const renderShaderCode = await loadShader('/shaders/render.wgsl');
 
-async function init() {
+
+async function main() {
   const canvas = document.getElementById("gpuCanvas");
   if (!navigator.gpu) {
     console.error("WebGPU not supported.");
     return;
   }
 
-  const adapter = await navigator.gpu.requestAdapter();
-  const device = await adapter.requestDevice();
-  const context = canvas.getContext("webgpu");
-  const format = navigator.gpu.getPreferredCanvasFormat();
+  const {
+    device,
+    context,
+    gridSizeBuffer,
+    timeBuffer,
+    explosionLocationBuffer,
+    computeShaders,
+    renderPipeline,
+    renderBindGroup,
+    density,
+    velocity,
+    pressure,
+    divergence
+  } = await initialize(canvas);
 
-  context.configure({
-    device: device,
-    format: format,
-    alphaMode: "opaque",
+  let gridSize = 256;
+  let previousTime = 0
+  let mouseClick = false;
+  let workgroup_size = Math.ceil(gridSize / 16);
+
+  canvas.addEventListener("click", (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = (event.clientX - rect.left) / rect.width * gridSize;
+    const mouseY = (1 - (event.clientY - rect.top) / rect.height) * gridSize;
+    device.queue.writeBuffer(explosionLocationBuffer, 0, new Float32Array([mouseX, mouseY]));
+    mouseClick = true;
   });
 
-  const gridSize = 128;
+  function passage(device,pass,velocity,density,pressure,divergence,gridSizeBuffer,explosionLocationBuffer,dt){
+    if (mouseClick){
+      computeShaders.explosion.computePass(
+        device,
+        pass,
+        [velocity.readBuffer,density.readBuffer,pressure.readBuffer,explosionLocationBuffer,gridSizeBuffer],
+        workgroup_size, workgroup_size);
+      mouseClick = false;
+    }
+
+    computeShaders.velocity.computePass(
+      device,
+      pass,
+      [velocity, gridSizeBuffer, dt],
+      workgroup_size, workgroup_size);
+
+    computeShaders.advect.computePass(
+      device,
+      pass,
+      [velocity.readBuffer, density, gridSizeBuffer, dt],
+      workgroup_size, workgroup_size);
+    
+    computeShaders.divergence.computePass(
+      device,
+      pass,
+      [divergence.readBuffer, velocity.readBuffer, gridSizeBuffer],
+      workgroup_size, workgroup_size);
+
+    for (let i = 0; i < 40; i++){
+      computeShaders.pressure.computePass(
+        device,
+        pass,
+        [divergence.readBuffer, pressure, gridSizeBuffer],
+        workgroup_size, workgroup_size);
+    }
+    
+    computeShaders.substract.computePass(
+      device,
+      pass,
+      [velocity.readBuffer, pressure.readBuffer, gridSizeBuffer],
+      workgroup_size, workgroup_size);
+  }
+
   
-  const gridSizeBuffer = device.createBuffer({
-    size: 4, // 16-bit integer
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-  });
+  function frame(currentTime) {
+    const deltaTime = (currentTime - previousTime) / 1000;
 
-  device.queue.writeBuffer(gridSizeBuffer, 0, new Uint32Array([gridSize]));
+    const timeArray = new Float32Array([deltaTime]);
 
-  const velocityBuffer = device.createBuffer({
-    size: gridSize * gridSize * 2 * Float32Array.BYTES_PER_ELEMENT,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-  });
+    device.queue.writeBuffer(timeBuffer,0,timeArray.buffer,0,timeArray.byteLength);
 
-  const densityBuffer = device.createBuffer({
-    size: gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
-  });
-
-  const computeModule = device.createShaderModule({
-    code: computeShaderCode,
-  });
-
-  const bindGroupLayout = device.createBindGroupLayout({
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "storage",
-          minBindingSize: 8, // minBindingSize is 8 because we have 2 * 32f, bindingSize is computed elementwise in buffer, not for whole buffersize.
-        },
-      },
-      {
-        binding: 1,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "storage",
-          minBindingSize: 4,
-        },
-      },
-      {
-        binding: 2,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "uniform",
-          minBindingSize: 4,
-        },
-      },
-    ],
-  });
-  
-
-  const computePipeline = device.createComputePipeline({
-    layout: "auto"/*device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
-    })*/,
-    compute: {
-      module: computeModule,
-      entryPoint: "main",
-    },
-  });
-
-
-  // Create the bind group for the compute pass
-  const bindGroup = device.createBindGroup({
-    layout: computePipeline.getBindGroupLayout(0),
-    entries: [
-      {
-        binding: 0,
-        resource: { buffer: densityBuffer },
-      },
-      {
-        binding: 1,
-        resource: { buffer: gridSizeBuffer },
-      },
-    ],
-  });
-
-  // Create the render pipeline
-  const renderModule = device.createShaderModule({
-    code: renderShaderCode,
-  });
-  
-  const renderPipeline = device.createRenderPipeline({
-    layout: "auto",
-    vertex: {
-      module: renderModule,
-      entryPoint: "vertex_main", 
-    },
-    fragment: {
-      module: renderModule,
-      entryPoint: "fragment_main",
-      targets: [{ format }],
-    },
-    primitive: {
-      topology: "triangle-list",
-    },
-  });
-
-  // Create the render bind group
-  const renderBindGroup = device.createBindGroup({
-    layout: renderPipeline.getBindGroupLayout(0),
-    entries: [
-      {
-        binding: 0,
-        resource: { buffer: densityBuffer }, // Bind density buffer for rendering
-      },
-    ],
-  });
-
-  function frame() {
     const commandEncoder = device.createCommandEncoder();
 
     // Compute pass for advection
     const computePass = commandEncoder.beginComputePass();
-    computePass.setPipeline(computePipeline);
-    computePass.setBindGroup(0, bindGroup);
-    computePass.dispatchWorkgroups(Math.ceil(gridSize / 16), Math.ceil(gridSize / 16)); // Dispatch compute workgroups
+    passage(device,computePass,velocity,density,pressure,divergence,gridSizeBuffer,explosionLocationBuffer,timeBuffer);
     computePass.end();
 
     // Rendering (visualize the density buffer)
@@ -166,11 +113,15 @@ async function init() {
     renderPass.end();
 
     device.queue.submit([commandEncoder.finish()]);
-    requestAnimationFrame(frame);
+    setTimeout(() => {
+      requestAnimationFrame(frame);
+    }, 0);
   }
 
-  requestAnimationFrame(frame);
-}
+  requestAnimationFrame((time) => {
+    previousTime = time;
+    frame(time)});
+  }
 
-init();
+main();
 

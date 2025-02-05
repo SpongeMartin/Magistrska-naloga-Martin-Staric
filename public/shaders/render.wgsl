@@ -22,12 +22,13 @@ fn vertex_main(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 }
 
 @group(0) @binding(0) var<storage, read> density : array<f32>;
+@group(0) @binding(1) var<uniform> gridSize : u32;
 
 @fragment
 fn fragment_main(@location(0) fragUV: vec2<f32>) -> @location(0) vec4<f32> {
-  let x = u32(fragUV.x * 128.0);
-  let y = u32(fragUV.y * 128.0);
-  let idx = y * 128u + x;
+  let x = u32(fragUV.x * f32(gridSize));
+  let y = u32(fragUV.y * f32(gridSize));
+  let idx = y * gridSize + x;
   let value = density[idx];
   return vec4<f32>(value, value, value, 1.0);
 }
