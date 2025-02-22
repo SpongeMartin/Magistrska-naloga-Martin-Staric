@@ -70,3 +70,35 @@ export class GridBuffer {
         this.writeBuffer = tmp;
     }
 }
+
+export function borderControl(in_arr,out_arr,out_val, fun_name ="borderControl"){ 
+    // Make a function for wgsl, where the first parameter chooses the type of value there will be on the border of the simulation. 
+    // 0 = copy value from inside the simulation to the border.
+    // else = border values are 0.
+    return /*wgsl*/`
+        fn ${fun_name}(t: u32, x: u32, y: u32, idx: u32){
+            let atLeft = (x == 0);
+            let atRight = (x == gridSize - 1);
+            let atTop = (y == gridSize - 1);
+            let atBottom = (y == 0);
+            let atBorder = atLeft || atBottom || atRight || atTop;
+            if(t == 0){
+                if (atLeft) {
+                    ${out_arr}[idx] = ${in_arr}[idx + 1];
+                }
+                if (atRight) {
+                    ${out_arr}[idx] = ${in_arr}[idx - 1];
+                }
+                if (atTop) {
+                    ${out_arr}[idx] = ${in_arr}[idx - gridSize];
+                }
+                if (atBottom) {
+                    ${out_arr}[idx] = ${in_arr}[idx + gridSize];
+                } 
+            }else{
+                if(atBorder){
+                    ${out_arr}[idx] = ${out_val};
+                }
+            }
+        }
+    `};

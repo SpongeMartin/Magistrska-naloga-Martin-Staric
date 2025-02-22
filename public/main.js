@@ -1,7 +1,5 @@
 import { initialize } from './init.js';
 
-
-
 async function main() {
   const canvas = document.getElementById("gpuCanvas");
   if (!navigator.gpu) {
@@ -15,6 +13,7 @@ async function main() {
     gridSizeBuffer,
     timeBuffer,
     explosionLocationBuffer,
+    renderModeBuffer,
     computeShaders,
     renderPipeline,
     renderBindGroup,
@@ -35,6 +34,14 @@ async function main() {
     const mouseY = (1 - (event.clientY - rect.top) / rect.height) * gridSize;
     device.queue.writeBuffer(explosionLocationBuffer, 0, new Float32Array([mouseX, mouseY]));
     mouseClick = true;
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key >= "1" && event.key <= "4") {
+        const renderModeValue = parseInt(event.key);
+        device.queue.writeBuffer(renderModeBuffer,0,new Uint32Array([renderModeValue-1]));
+    }
+    console.log(renderModeBuffer);
   });
 
   function passage(device,pass,velocity,density,pressure,divergence,gridSizeBuffer,explosionLocationBuffer,dt){
@@ -65,7 +72,7 @@ async function main() {
       [divergence.readBuffer, velocity.readBuffer, gridSizeBuffer],
       workgroup_size, workgroup_size);
 
-    for (let i = 0; i < 40; i++){
+    for (let i = 0; i < 100; i++){
       computeShaders.pressure.computePass(
         device,
         pass,

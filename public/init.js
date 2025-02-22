@@ -2,7 +2,7 @@ import { advectShader } from "./shaders/advect.js";
 import { divergenceShader } from "./shaders/divergence.js";
 import { explosionShader } from "./shaders/explosion.js";
 import { pressureShader } from "./shaders/jacobi.js";
-import { gradientSubstractionShader } from "./shaders/substraction.js";
+import { gradientSubtractionShader } from "./shaders/subtraction.js";
 import { velocityAdvectionShader } from "./shaders/velocity.js";
 import { GridBuffer } from "./utils.js";
 
@@ -36,7 +36,11 @@ export async function initialize(canvas) {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     device.queue.writeBuffer(gridSizeBuffer, 0, new Uint32Array([gridSize]));
-  
+    const renderModeBuffer = device.createBuffer({
+        size: 4, // 32-bit integer (byte = 8 bits, 8 * 4 = 32-bit)
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(renderModeBuffer,0,new Uint32Array([0]));
     const timeBuffer = device.createBuffer({
         size: 4, // 32-bit integer
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -109,7 +113,7 @@ export async function initialize(canvas) {
     velocityAdvectionShader(device,computeShaders);
     divergenceShader(device,computeShaders);
     pressureShader(device,computeShaders);
-    gradientSubstractionShader(device,computeShaders);
+    gradientSubtractionShader(device,computeShaders);
   
     // Create the render pipeline
     const renderModule = device.createShaderModule({ code: renderShaderCode });
@@ -124,7 +128,11 @@ export async function initialize(canvas) {
         layout: renderPipeline.getBindGroupLayout(0),
         entries: [
             { binding: 0, resource: { buffer: density.readBuffer } },
-            { binding: 1, resource: { buffer: gridSizeBuffer } },
+            { binding: 1, resource: { buffer: velocity.readBuffer } },
+            { binding: 2, resource: { buffer: pressure.readBuffer } },
+            { binding: 3, resource: { buffer: divergence.readBuffer } },
+            { binding: 4, resource: { buffer: gridSizeBuffer } },
+            { binding: 5, resource: { buffer: renderModeBuffer } },
         ]});
   
     return {
@@ -133,6 +141,7 @@ export async function initialize(canvas) {
         gridSizeBuffer,
         timeBuffer,
         explosionLocationBuffer,
+        renderModeBuffer,
         computeShaders,
         renderPipeline,
         renderBindGroup,

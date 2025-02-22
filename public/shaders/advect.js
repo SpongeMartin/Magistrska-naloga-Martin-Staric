@@ -1,4 +1,4 @@
-import { ComputeShader } from "../utils.js";
+import { ComputeShader, borderControl } from "../utils.js";
 
 export function advectShader(device, computeShaders) {
     computeShaders.advect = new ComputeShader("advect", device, /*wgsl*/`
@@ -7,6 +7,8 @@ export function advectShader(device, computeShaders) {
     @group(0) @binding(2) var<storage, read_write> density_out : array<f32>;
     @group(0) @binding(3) var<uniform> gridSize : u32;
     @group(0) @binding(4) var<uniform> dt : f32;
+
+    ${borderControl("density_in","density_out","0")}
 
     fn sample_density_at(pos: vec2<f32>) -> f32 {
         // Bilinear interpolation
@@ -24,7 +26,7 @@ export function advectShader(device, computeShaders) {
         let tl = density_in[x1 + y2 * gridSize];
         let tr = density_in[x2 + y2 * gridSize];
     
-        let xMod = fract(x); // Only keeps the fraction (decimalke)
+        let xMod = fract(x);
         let yMod = fract(y);
         
         let bilerp = mix(mix(bl, br, xMod), mix(tl, tr, xMod), yMod);
@@ -36,10 +38,6 @@ export function advectShader(device, computeShaders) {
         // 4 points from previous position and apply it to the quantity, in our case density.
         let vel: vec2<f32> = velocity_in[idx];
         let prevPos: vec2<f32> = vec2<f32>(x, y) - vel * dt; // * rdx?
-        /* if (max(prevPos.x,prevPos.y) < f32(gridSize) && min(prevPos.x,prevPos.y) > 0){
-            return sample_density_at(prevPos);
-        }
-        return 0.0; */
         return sample_density_at(prevPos);
     }
 
@@ -54,5 +52,7 @@ export function advectShader(device, computeShaders) {
         result = advectedDensity * 0.999;
 
         density_out[idx] = result;
+
+        borderControl(0, x, y, idx);
     }`);
 }

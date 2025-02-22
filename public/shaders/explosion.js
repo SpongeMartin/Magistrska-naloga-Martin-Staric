@@ -17,27 +17,40 @@ export function explosionShader(device, computeShaders) {
         let cellPos = vec2<f32>(f32(x), f32(y));
         let toCell = cellPos - mousePos;
         let dist = length(toCell);
-        let rad = 15.0; // effected area
-        let strength = 3.0; // how much force is applied
+        let rad = 25.0; // effected area
+        let strength = 8.0; // how much force is applied
+        let dissipate = 1.0;
 
-        if (dist < rad) {
+        let atLeft = (x == 0);
+        let atRight = (x == gridSize - 1);
+        let atTop = (y == gridSize - 1);
+        let atBottom = (y == 0);
+        let edgeConditions = atLeft || atRight || atTop || atBottom;
+
+        /* if (dist < 2 * rad && rad < dist && !edgeConditions){
+            let force = normalize(toCell) * (strength * (1.0 - (dist * dissipate) / rad));
+            velocity[idx] += force;
+        } */
+
+        if (dist < rad && !edgeConditions) {
             // Apply an outward force from the mouse position
-            let force = normalize(toCell) * (strength * (1.0 - dist / rad));
+            let force = normalize(toCell) * (strength * (1.0 - (dist * dissipate) / rad));
             velocity[idx] += force;
 
-            let densityIncrease = 0.3 * (1.0 - dist / rad);
+            let densityIncrease = 3.0 * (1.0 - dist / rad);
             density[idx] += densityIncrease;
 
-            let pressureIncrease = 1.0 * (1.0 - dist / rad);
-            pressure[idx] += pressureIncrease;
+            let pressureIncrease = 1.0 * (1.0 - dist / rad );
+            //pressure[idx] += pressureIncrease;
+            pressure[idx] = pressure[idx];
 
             if (density[idx] > 1.0){
                 density[idx] = 1.0;
             }
 
-            if (pressure[idx] > 1.0){
+            /*if (pressure[idx] > 1.0){
                 pressure[idx] = 1.0;
-            }
+            }*/
 
         }
     }`);

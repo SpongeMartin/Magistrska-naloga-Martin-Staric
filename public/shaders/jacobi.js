@@ -28,5 +28,6 @@ export function pressureShader(device, computeShaders) {
         let pressureResult = (xL + xR + xB + xT + alpha * div) * rBeta;
 
         pressure_out[idx] = pressureResult;
+
     }`);
 }

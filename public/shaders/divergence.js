@@ -12,11 +12,6 @@ export function divergenceShader(device, computeShaders) {
         let y = global_id.y;
         let idx = x + y * gridSize;
         let gs = gridSize - 1;
-        
-        /* let xL = velocity_in[idx - 1];
-        let xR = velocity_in[idx + 1];
-        let xB = velocity_in[idx - gridSize];
-        let xT = velocity_in[idx + gridSize]; */
 
         let xL = velocity_in[clamp(x - 1, 0, gs) + y * gridSize];
         let xR = velocity_in[clamp(x + 1, 0, gs) + y * gridSize];
