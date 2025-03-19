@@ -1,11 +1,5 @@
 # Magistrska naloga - Realnočasovna simulacija volumetričnih učinkov v igrah
 
-Za spremembo načina upodabljanja pritisni na tipkovnici:
-- 1: Upodabljanje dima
-- 2: Debug hitrostnega polja
-- 3: Debug pritiska
-- 4: Debug divergence
-
 🛠
 
 ## 1) Simulacija tekočin

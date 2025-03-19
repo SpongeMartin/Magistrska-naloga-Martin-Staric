@@ -2,9 +2,18 @@ import { advectShader } from "./shaders/advect.js";
 import { divergenceShader } from "./shaders/divergence.js";
 import { explosionShader } from "./shaders/explosion.js";
 import { pressureShader } from "./shaders/jacobi.js";
-import { gradientSubtractionShader } from "./shaders/subtraction.js";
+import { gradientSubstractionShader } from "./shaders/substraction.js";
 import { velocityAdvectionShader } from "./shaders/velocity.js";
 import { GridBuffer } from "./utils.js";
+import {
+    cubeVertexArray,
+    cubeVertexSize,
+    cubeUVOffset,
+    cubePositionOffset,
+    cubeVertexCount,
+  } from './objects/renderCube.js';
+
+export const gridSize = 64;
 
 export async function loadShader(filePath) {
     const response = await fetch(filePath);
@@ -26,9 +35,6 @@ export async function initialize(canvas) {
         alphaMode: "opaque",
       });
 
-    const gridSize = 256;
-    const halfSize = gridSize / 2;
-
     const renderShaderCode = await loadShader('/shaders/render.wgsl');
   
     const gridSizeBuffer = device.createBuffer({
@@ -45,66 +51,50 @@ export async function initialize(canvas) {
         size: 4, // 32-bit integer
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-
+    const stepSizeBuffer = device.createBuffer({
+        size: 4, // 32-bit float
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
     const explosionLocationBuffer = device.createBuffer({
-        size: 8,
+        size: 12,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
+    const cubeBuffer = device.createBuffer({
+        size: cubeVertexArray.byteLength,
+        usage: GPUBufferUsage.VERTEX,
+        mappedAtCreation: true,
+    });
+    new Float32Array(cubeBuffer.getMappedRange()).set(cubeVertexArray);
+    cubeBuffer.unmap();
+
+    // Create GPU Buffers for Matrices
+    const modelBuffer = device.createBuffer({
+        size: 16 * 4, // 4x4 matrix (16 floats)
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    const viewBuffer = device.createBuffer({
+        size: 16 * 4, // 4x4 matrix (16 floats)
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    const projBuffer = device.createBuffer({
+        size: 16 * 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    
+    const invMVPBuffer = device.createBuffer({
+        size: 16 * 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
   
-    const velocity = new GridBuffer("velocity", device, gridSize * gridSize * 2 * Float32Array.BYTES_PER_ELEMENT);
+    const velocity = new GridBuffer("velocity", device, gridSize * gridSize * gridSize * 3 * Float32Array.BYTES_PER_ELEMENT);
 
-    const density = new GridBuffer("density", device, gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
+    const density = new GridBuffer("density", device, gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
 
-    const divergence = new GridBuffer("divergence", device, gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
+    const divergence = new GridBuffer("divergence", device, gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
 
-    const pressure = new GridBuffer("pressure", device, gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
-
-     // Initialize custom velocity and density grid values.
-    /* const initialVelocityData = new Float32Array(gridSize * gridSize * 2).fill(0);
-    const initialDensityData = new Float32Array(gridSize * gridSize);
-
-    // Fill velocity buffer with circular flow
-    for (let y = 0; y < gridSize; y++) {
-        for (let x = 0; x < gridSize; x++) {
-            const index = (y * gridSize + x) * 2; // Each cell has 2 velocity components
-            if (x < halfSize && y < halfSize) {
-                initialVelocityData[index] = -0.1; // right 
-                initialVelocityData[index + 1] = 0.1; 
-            } else if (x >= halfSize && y < halfSize) {
-                initialVelocityData[index] = -0.1; // right 
-                initialVelocityData[index + 1] = 0.1; 
-            } else if (x >= halfSize && y >= halfSize) {
-                initialVelocityData[index] = -0.1; // right 
-                initialVelocityData[index + 1] = 0.1; 
-            } else {
-                initialVelocityData[index] = -0.1; // right 
-                initialVelocityData[index + 1] = 0.1; 
-            }
-        }
-    } 
-  
-    
-    
-
-    // Update the buffers with custom velocity and density!
-    device.queue.writeBuffer(
-        velocity.readBuffer,            // Which buffer to write in
-        0,                              // Offset in bytes from start
-        initialVelocityData.buffer,     // Which buffer to read from
-        0,                              // Byte offset for read buffer
-        initialVelocityData.byteLength  // Number of bytes to copy
-    ); */
-    
-
-    /* const initialDensityData = new Float32Array(gridSize * gridSize);
-
-    for (let x = 32; x < 96; x++) {
-        for (let y = 32; y < 96; y++) {
-            initialDensityData[y * 128 + x] = Math.random();
-        }
-    }
-
-    device.queue.writeBuffer(density.readBuffer,0,initialDensityData.buffer,0,initialDensityData.byteLength); */
+    const pressure = new GridBuffer("pressure", device, gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
     
     // Initializing shaders
     const computeShaders = {};
@@ -113,27 +103,101 @@ export async function initialize(canvas) {
     velocityAdvectionShader(device,computeShaders);
     divergenceShader(device,computeShaders);
     pressureShader(device,computeShaders);
-    gradientSubtractionShader(device,computeShaders);
+    gradientSubstractionShader(device,computeShaders);
   
     // Create the render pipeline
     const renderModule = device.createShaderModule({ code: renderShaderCode });
     const renderPipeline = device.createRenderPipeline({
         layout: "auto",
-        vertex: { module: renderModule, entryPoint: "vertex_main" },
-        fragment: { module: renderModule, entryPoint: "fragment_main", targets: [{ format }] },
-        primitive: { topology: "triangle-list" },
+        vertex: { module: renderModule,
+            entryPoint: "vertex_main",
+            buffers: [{
+                arrayStride: cubeVertexSize,
+                attributes: [
+                    {
+                        // position
+                        shaderLocation: 0,
+                        offset: cubePositionOffset,
+                        format: 'float32x4',
+                    },
+                    {
+                        // uv
+                        shaderLocation: 1,
+                        offset: cubeUVOffset,
+                        format: 'float32x2',
+                    },
+                ],
+            }]
+        },
+        fragment: { 
+            module: renderModule,
+            entryPoint: "fragment_main",
+            targets: [{
+                format,
+                blend: {
+                    color: {
+                        srcFactor: "src-alpha",
+                        dstFactor: "one-minus-src-alpha",
+                        operation: "add"
+                    },
+                    alpha: {
+                        srcFactor: "one",
+                        dstFactor: "one-minus-src-alpha",
+                        operation: "add"
+                    }
+                },
+                writeMask: GPUColorWrite.ALL
+            }]
+        },
+        primitive: { 
+            topology: "triangle-list",
+            cullMode: "back"
+        },
+        depthStencil: { depthWriteEnabled: true,
+            depthCompare: "less",
+            format: "depth24plus"
+        }
     });
-  
+
+    console.log(canvas.scrollHeight)
+
+    const depthTexture = device.createTexture({
+        size: [canvas.scrollWidth, canvas.scrollHeight],
+        format: "depth24plus",
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
+
     const renderBindGroup = device.createBindGroup({
         layout: renderPipeline.getBindGroupLayout(0),
         entries: [
-            { binding: 0, resource: { buffer: density.readBuffer } },
-            { binding: 1, resource: { buffer: velocity.readBuffer } },
-            { binding: 2, resource: { buffer: pressure.readBuffer } },
-            { binding: 3, resource: { buffer: divergence.readBuffer } },
-            { binding: 4, resource: { buffer: gridSizeBuffer } },
-            { binding: 5, resource: { buffer: renderModeBuffer } },
-        ]});
+            { binding: 0, resource: { buffer: modelBuffer } },
+            { binding: 1, resource: { buffer: viewBuffer } },
+            { binding: 2, resource: { buffer: projBuffer } },
+            { binding: 3, resource: { buffer: invMVPBuffer } },
+            { binding: 4, resource: { buffer: density.readBuffer } },
+            { binding: 5, resource: { buffer: velocity.readBuffer } },
+            { binding: 6, resource: { buffer: pressure.readBuffer } },
+            { binding: 7, resource: { buffer: divergence.readBuffer } },
+            { binding: 8, resource: { buffer: gridSizeBuffer } },
+            { binding: 9, resource: { buffer: renderModeBuffer } },
+    ]});
+
+    const renderPassDescriptor = {
+        colorAttachments: [
+          {
+            view: undefined,
+            loadOp: "clear",
+            storeOp: "store",
+            clearValue: { r: 0.05, g: 0.10, b: 0.05, a: 1.0 }
+          },
+        ],
+        depthStencilAttachment: {
+            view: depthTexture.createView(),
+            depthClearValue: 1.0,
+            depthLoadOp: 'clear',
+            depthStoreOp: 'store',
+          },
+      }
   
     return {
         device,
@@ -142,13 +206,20 @@ export async function initialize(canvas) {
         timeBuffer,
         explosionLocationBuffer,
         renderModeBuffer,
+        cubeBuffer,
+        stepSizeBuffer,
+        renderPassDescriptor,
         computeShaders,
         renderPipeline,
         renderBindGroup,
         density,
         velocity,
         pressure,
-        divergence
+        divergence,
+        modelBuffer,
+        viewBuffer,
+        projBuffer,
+        invMVPBuffer
     };
 }
   

@@ -21,7 +21,7 @@ export class ComputeShader {
     }
 
     // Add component dispatchZ for 3D
-    computePass(device, pass, entries, dispatchX, dispatchY) {
+    computePass(device, pass, entries, dispatchX, dispatchY, dispatchZ) {
         pass.setPipeline(this.pipeline);
         let bindingIndex = 0;
         pass.setBindGroup(0, device.createBindGroup({
@@ -38,7 +38,7 @@ export class ComputeShader {
                     return { binding: bindingIndex++, resource: { buffer: element } };
                 }
             })}));
-        pass.dispatchWorkgroups(dispatchX, dispatchY);
+        pass.dispatchWorkgroups(dispatchX, dispatchY, dispatchZ);
         entries.forEach(entry => { if (entry instanceof GridBuffer) entry.swap(); });
     }
 }
@@ -76,25 +76,33 @@ export function borderControl(in_arr,out_arr,out_val, fun_name ="borderControl")
     // 0 = copy value from inside the simulation to the border.
     // else = border values are 0.
     return /*wgsl*/`
-        fn ${fun_name}(t: u32, x: u32, y: u32, idx: u32){
+        fn ${fun_name}(t: u32, x: u32, y: u32, z:u32, idx: u32){
             let atLeft = (x == 0);
             let atRight = (x == gridSize - 1);
             let atTop = (y == gridSize - 1);
             let atBottom = (y == 0);
-            let atBorder = atLeft || atBottom || atRight || atTop;
+            let atFront = (z == gridSize-1);
+            let atBack = (z == 0);
+            let atBorder = atLeft || atBottom || atRight || atTop || atBack || atFront;
             if(t == 0){
                 if (atLeft) {
                     ${out_arr}[idx] = ${in_arr}[idx + 1];
                 }
-                if (atRight) {
+                else if(atRight) {
                     ${out_arr}[idx] = ${in_arr}[idx - 1];
                 }
-                if (atTop) {
+                else if(atTop) {
                     ${out_arr}[idx] = ${in_arr}[idx - gridSize];
                 }
-                if (atBottom) {
+                else if(atBottom) {
                     ${out_arr}[idx] = ${in_arr}[idx + gridSize];
-                } 
+                }
+                else if(atFront){
+                    ${out_arr}[idx] = ${in_arr}[idx - gridSize * gridSize];
+                }
+                else if(atBack){
+                    ${out_arr}[idx] = ${in_arr}[idx + gridSize * gridSize];
+                }
             }else{
                 if(atBorder){
                     ${out_arr}[idx] = ${out_val};

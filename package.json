@@ -9,6 +9,8 @@
   "author": "Martin Starič",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "gl-matrix": "^3.4.3",
+    "webgpu": "^0.2.11"
   }
 }
