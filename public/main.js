@@ -27,7 +27,9 @@ async function main() {
     modelBuffer,
     viewBuffer,
     projBuffer,
-    invMVPBuffer
+    invMVPBuffer,
+    densityTexture,
+    writeTexture
   } = await initialize(canvas);
 
   function resizeCanvasToDisplaySize(canvas) {
@@ -152,6 +154,8 @@ async function main() {
       pass,
       [velocity.readBuffer, pressure.readBuffer, gridSizeBuffer],
       workgroup_size, workgroup_size, workgroup_size);
+
+    //writeTexture(densityTexture,density.readBuffer);
   }
 
   function frame(currentTime) {

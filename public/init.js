@@ -95,6 +95,35 @@ export async function initialize(canvas) {
     const divergence = new GridBuffer("divergence", device, gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
 
     const pressure = new GridBuffer("pressure", device, gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
+
+    const densityTexture = device.createTexture({
+        size: [gridSize, gridSize, gridSize],
+        format: "r32float", // 32-bit float for density values
+        dimension: "3d",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
+    });
+
+    function writeTexture(densityTexture, densityData){
+        console.log(densityData instanceof Float32Array);
+        device.queue.writeTexture(
+            {
+                texture: densityTexture,  // Ensure this is a valid GPUTexture
+                mipLevel: 0,
+                origin: { x: 0, y: 0, z: 0 },
+                aspect: "all",
+            },
+            densityData,
+            { bytesPerRow: gridSize * 4, rowsPerImage: gridSize }, // Each row has gridSize floats (4 bytes per float)
+            { width: gridSize, height: gridSize, depthOrArrayLayers: gridSize });
+    }
+
+    const densitySampler = device.createSampler({
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge",
+        addressModeW: "clamp-to-edge",
+        minFilter: "linear",
+        magFilter: "linear",
+    });
     
     // Initializing shaders
     const computeShaders = {};
@@ -180,6 +209,8 @@ export async function initialize(canvas) {
             { binding: 7, resource: { buffer: divergence.readBuffer } },
             { binding: 8, resource: { buffer: gridSizeBuffer } },
             { binding: 9, resource: { buffer: renderModeBuffer } },
+            /* { binding: 10, resource: densityTexture.createView() },
+            { binding: 11, resource: densitySampler } */
     ]});
 
     const renderPassDescriptor = {
@@ -219,7 +250,9 @@ export async function initialize(canvas) {
         modelBuffer,
         viewBuffer,
         projBuffer,
-        invMVPBuffer
+        invMVPBuffer,
+        densityTexture,
+        writeTexture
     };
 }
   

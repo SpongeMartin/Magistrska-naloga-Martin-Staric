@@ -44,7 +44,9 @@ fn vertex_main(@location(0) position: vec4f,
 @group(0) @binding(7) var<storage, read> divergence : array<f32>;
 @group(0) @binding(8) var<uniform> gridSize : u32;
 @group(0) @binding(9) var<uniform> renderMode : u32;
-//@group(0) @binding(9) var<uniform> stepSize : f32;
+//@group(0) @binding(10) var densityTexture : texture_3d<f32>;
+//@group(0) @binding(11) var densitySampler : sampler;
+//@group(0) @binding(12) var<uniform> stepSize : f32;
 
 
 fn intersectCube(rayOrigin: vec3<f32>, rayDir: vec3<f32>) -> vec2<f32> {
@@ -59,9 +61,22 @@ fn intersectCube(rayOrigin: vec3<f32>, rayDir: vec3<f32>) -> vec2<f32> {
 }
 
 fn sampleDensity(position: vec3<f32>) -> vec4<f32> {
-  let id = vec3<u32>(floor(position * f32(gridSize)));
-  let idx = id.x + id.y * gridSize + id.z * gridSize * gridSize;
-  return vec4(1.0, 1.0, 1.0, density[idx]);
+    let volumeMin = vec3<f32>(0.0);
+    let volumeMax = vec3<f32>(1.0);
+
+    // Normalize position to [0,1]
+    let normalizedPosition = (position - volumeMin) / (volumeMax - volumeMin);
+
+    // Scale to [0, gridSize-1]
+    let id = vec3<u32>(floor(normalizedPosition * f32(gridSize - 1)));
+
+    // Clamp to avoid out-of-bounds errors
+    let idClamped = clamp(id, vec3<u32>(0), vec3<u32>(gridSize - 1));
+
+    // Compute 1D index for accessing the density array
+    let idx = idClamped.x + idClamped.y * gridSize + idClamped.z * gridSize * gridSize;
+
+    return vec4<f32>(1.0, 1.0, 1.0, density[idx]); // Assuming density is in [0,1] range
 }
 
 @fragment
@@ -82,7 +97,7 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4<f32> {
   }
 
   if(renderMode == 1){
-    let rayDir = in.rayTo - in.rayFrom;
+    let rayDir = normalize(in.rayTo - in.rayFrom);
     let tbounds = max(intersectCube(in.rayFrom,rayDir), vec2(0.0));
     var oColor = vec4(0.0,0.0,0.0,1.0);
     oColor = vec4(tbounds.x, tbounds.y, 0.0, 1.0);

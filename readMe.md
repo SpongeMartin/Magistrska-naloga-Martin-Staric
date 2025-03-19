@@ -10,7 +10,7 @@ Implementiramo simulacijo tekočin na podlagi [StamFluidforGames.pdf](http://gra
 - [x] Divergence
 - [x] Pressure itteration
 - [x] Connect shaders and render
-- [] Viscosity?
-- [🛠] Conditions for explosions
+- [🛠] Buoyancy
+- [x] Conditions for explosions
 - [🛠] Open boundaries
 - [🛠] Port to 3D
