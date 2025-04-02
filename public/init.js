@@ -14,7 +14,7 @@ import {
     cubeVertexCount,
   } from './objects/renderCube.js';
 
-export const gridSize = 128;
+export const gridSize = 64;
 
 export async function loadShader(filePath) {
     const response = await fetch(filePath);
@@ -121,9 +121,9 @@ export async function initialize(canvas) {
         // Map the buffer and read the data
         await readBuffer.mapAsync(GPUMapMode.READ);
         const arrayBuffer = readBuffer.getMappedRange();
-        const floatArray = new Float32Array(arrayBuffer.slice(0)); // Clone to avoid issues
+        const floatArray = new Float32Array(arrayBuffer.slice(0));
     
-        readBuffer.unmap(); // Unmap after reading
+        readBuffer.unmap();
         return floatArray;
     }
 
@@ -132,7 +132,7 @@ export async function initialize(canvas) {
         device.queue.writeTexture(
             { texture: tex },
             arr,
-            { bytesPerRow: gridSize * 4, rowsPerImage: gridSize }, // Each row has gridSize floats (4 bytes per float)
+            { bytesPerRow: gridSize * 4, rowsPerImage: gridSize },
             { width: gridSize, height: gridSize, depthOrArrayLayers: gridSize });
     }
     
