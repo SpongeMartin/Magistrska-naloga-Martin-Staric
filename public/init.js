@@ -4,6 +4,7 @@ import { explosionShader } from "./shaders/explosion.js";
 import { pressureShader } from "./shaders/jacobi.js";
 import { gradientSubstractionShader } from "./shaders/substraction.js";
 import { velocityAdvectionShader } from "./shaders/velocity.js";
+import { renderingShader } from "./shaders/render.js";
 import { GridBuffer } from "./utils.js";
 import {
     cubeVertexArray,
@@ -13,7 +14,7 @@ import {
     cubeVertexCount,
   } from './objects/renderCube.js';
 
-export const gridSize = 64;
+export const gridSize = 128;
 
 export async function loadShader(filePath) {
     const response = await fetch(filePath);
@@ -27,43 +28,45 @@ export async function initialize(canvas) {
     const adapter = await navigator.gpu.requestAdapter();
     const device = await adapter.requestDevice();
     const context = canvas.getContext("webgpu");
-    const format = navigator.gpu.getPreferredCanvasFormat();
-
-    context.configure({
-        device: device,
-        format: format,
-        alphaMode: "opaque",
-      });
-
-    const renderShaderCode = await loadShader('/shaders/render.wgsl');
+    const format = "rgba8unorm";
+    const usage =
+        GPUTextureUsage.RENDER_ATTACHMENT |
+        GPUTextureUsage.STORAGE_BINDING;
+    context.configure({ device, format, usage });
   
     const gridSizeBuffer = device.createBuffer({
         size: 4, // 32-bit integer (byte = 8 bits, 8 * 4 = 32-bit)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     device.queue.writeBuffer(gridSizeBuffer, 0, new Uint32Array([gridSize]));
+    
     const renderModeBuffer = device.createBuffer({
         size: 4, // 32-bit integer (byte = 8 bits, 8 * 4 = 32-bit)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     device.queue.writeBuffer(renderModeBuffer,0,new Uint32Array([0]));
+    
     const timeBuffer = device.createBuffer({
         size: 4, // 32-bit integer
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+    
     const stepSizeBuffer = device.createBuffer({
         size: 4, // 32-bit float
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+    
     const explosionLocationBuffer = device.createBuffer({
         size: 12,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
+    
     const cubeBuffer = device.createBuffer({
         size: cubeVertexArray.byteLength,
         usage: GPUBufferUsage.VERTEX,
         mappedAtCreation: true,
     });
+    
     new Float32Array(cubeBuffer.getMappedRange()).set(cubeVertexArray);
     cubeBuffer.unmap();
 
@@ -103,27 +106,35 @@ export async function initialize(canvas) {
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
     });
 
-    function writeTexture(densityTexture, densityData){
-        console.log(densityData instanceof Float32Array);
+    async function readBufferToFloat32Array(device, buffer, size) {
+        // Create a buffer for reading the data
+        const readBuffer = device.createBuffer({
+            size: size,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,  // Copyable and readable
+        });
+    
+        // Copy the GPU buffer data into the readable buffer
+        const commandEncoder = device.createCommandEncoder();
+        commandEncoder.copyBufferToBuffer(buffer, 0, readBuffer, 0, size);
+        device.queue.submit([commandEncoder.finish()]);
+    
+        // Map the buffer and read the data
+        await readBuffer.mapAsync(GPUMapMode.READ);
+        const arrayBuffer = readBuffer.getMappedRange();
+        const floatArray = new Float32Array(arrayBuffer.slice(0)); // Clone to avoid issues
+    
+        readBuffer.unmap(); // Unmap after reading
+        return floatArray;
+    }
+
+    async function writeTexture(tex, data, size = gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT){
+        let arr = await readBufferToFloat32Array(device,data,size);
         device.queue.writeTexture(
-            {
-                texture: densityTexture,  // Ensure this is a valid GPUTexture
-                mipLevel: 0,
-                origin: { x: 0, y: 0, z: 0 },
-                aspect: "all",
-            },
-            densityData,
+            { texture: tex },
+            arr,
             { bytesPerRow: gridSize * 4, rowsPerImage: gridSize }, // Each row has gridSize floats (4 bytes per float)
             { width: gridSize, height: gridSize, depthOrArrayLayers: gridSize });
     }
-
-    const densitySampler = device.createSampler({
-        addressModeU: "clamp-to-edge",
-        addressModeV: "clamp-to-edge",
-        addressModeW: "clamp-to-edge",
-        minFilter: "linear",
-        magFilter: "linear",
-    });
     
     // Initializing shaders
     const computeShaders = {};
@@ -133,103 +144,17 @@ export async function initialize(canvas) {
     divergenceShader(device,computeShaders);
     pressureShader(device,computeShaders);
     gradientSubstractionShader(device,computeShaders);
+    renderingShader(device,computeShaders);
   
-    // Create the render pipeline
-    const renderModule = device.createShaderModule({ code: renderShaderCode });
-    const renderPipeline = device.createRenderPipeline({
-        layout: "auto",
-        vertex: { module: renderModule,
-            entryPoint: "vertex_main",
-            buffers: [{
-                arrayStride: cubeVertexSize,
-                attributes: [
-                    {
-                        // position
-                        shaderLocation: 0,
-                        offset: cubePositionOffset,
-                        format: 'float32x4',
-                    },
-                    {
-                        // uv
-                        shaderLocation: 1,
-                        offset: cubeUVOffset,
-                        format: 'float32x2',
-                    },
-                ],
-            }]
-        },
-        fragment: { 
-            module: renderModule,
-            entryPoint: "fragment_main",
-            targets: [{
-                format,
-                blend: {
-                    color: {
-                        srcFactor: "src-alpha",
-                        dstFactor: "one-minus-src-alpha",
-                        operation: "add"
-                    },
-                    alpha: {
-                        srcFactor: "one",
-                        dstFactor: "one-minus-src-alpha",
-                        operation: "add"
-                    }
-                },
-                writeMask: GPUColorWrite.ALL
-            }]
-        },
-        primitive: { 
-            topology: "triangle-list",
-            cullMode: "back"
-        },
-        depthStencil: { depthWriteEnabled: true,
-            depthCompare: "less",
-            format: "depth24plus"
-        }
-    });
+    function render(computePass,canvasWidth,canvasHeight) {
+        const texture = context.getCurrentTexture();
+        computeShaders.render.renderPass(
+            device,
+            computePass,
+            [texture, densityTexture],
+            canvasWidth / 8, canvasHeight / 8);
+    }
 
-    console.log(canvas.scrollHeight)
-
-    const depthTexture = device.createTexture({
-        size: [canvas.scrollWidth, canvas.scrollHeight],
-        format: "depth24plus",
-        usage: GPUTextureUsage.RENDER_ATTACHMENT
-    });
-
-    const renderBindGroup = device.createBindGroup({
-        layout: renderPipeline.getBindGroupLayout(0),
-        entries: [
-            { binding: 0, resource: { buffer: modelBuffer } },
-            { binding: 1, resource: { buffer: viewBuffer } },
-            { binding: 2, resource: { buffer: projBuffer } },
-            { binding: 3, resource: { buffer: invMVPBuffer } },
-            { binding: 4, resource: { buffer: density.readBuffer } },
-            { binding: 5, resource: { buffer: velocity.readBuffer } },
-            { binding: 6, resource: { buffer: pressure.readBuffer } },
-            { binding: 7, resource: { buffer: divergence.readBuffer } },
-            { binding: 8, resource: { buffer: gridSizeBuffer } },
-            { binding: 9, resource: { buffer: renderModeBuffer } },
-            /* { binding: 10, resource: densityTexture.createView() },
-            { binding: 11, resource: densitySampler } */
-    ]});
-
-    const renderPassDescriptor = {
-        colorAttachments: [
-          {
-            view: undefined,
-            loadOp: "clear",
-            storeOp: "store",
-            clearValue: { r: 0.05, g: 0.10, b: 0.05, a: 1.0 }
-          },
-        ],
-        depthStencilAttachment: {
-            view: depthTexture.createView(),
-            depthClearValue: 1.0,
-            depthLoadOp: 'clear',
-            depthStoreOp: 'store',
-          },
-      }
-  
     return {
         device,
         context,
@@ -239,10 +164,7 @@ export async function initialize(canvas) {
         renderModeBuffer,
         cubeBuffer,
         stepSizeBuffer,
-        renderPassDescriptor,
         computeShaders,
-        renderPipeline,
-        renderBindGroup,
         density,
         velocity,
         pressure,
@@ -252,7 +174,8 @@ export async function initialize(canvas) {
         projBuffer,
         invMVPBuffer,
         densityTexture,
-        writeTexture
+        writeTexture,
+        render
     };
 }
   

@@ -29,7 +29,8 @@ async function main() {
     projBuffer,
     invMVPBuffer,
     densityTexture,
-    writeTexture
+    writeTexture,
+    render
   } = await initialize(canvas);
 
   function resizeCanvasToDisplaySize(canvas) {
@@ -101,7 +102,7 @@ async function main() {
     const rect = canvas.getBoundingClientRect();
     const mouseX = (event.clientX - rect.left) / rect.width * gridSize;
     const mouseY = (1 - (event.clientY - rect.top) / rect.height) * gridSize;
-    device.queue.writeBuffer(explosionLocationBuffer, 0, new Float32Array([mouseX, mouseY, 16.0]));
+    device.queue.writeBuffer(explosionLocationBuffer, 0, new Float32Array([mouseX, mouseY,Math.random() * (40 - 26) + 26]));
     mouseClick = true;
   });
 
@@ -119,8 +120,8 @@ async function main() {
         pass,
         [velocity.readBuffer,density.readBuffer,pressure.readBuffer,explosionLocationBuffer,gridSizeBuffer],
         workgroup_size, workgroup_size, workgroup_size);
-      mouseClick = false;
       console.log("boom");
+      mouseClick = false;
     }
 
     computeShaders.velocity.computePass(
@@ -155,7 +156,7 @@ async function main() {
       [velocity.readBuffer, pressure.readBuffer, gridSizeBuffer],
       workgroup_size, workgroup_size, workgroup_size);
 
-    //writeTexture(densityTexture,density.readBuffer);
+    writeTexture(densityTexture,density.readBuffer);
   }
 
   function frame(currentTime) {
@@ -173,21 +174,10 @@ async function main() {
     /* readBuffer(device,density.readBuffer,commandEncoder); */
     const computePass = commandEncoder.beginComputePass();
     passage(device,computePass,velocity,density,pressure,divergence,gridSizeBuffer,explosionLocationBuffer,timeBuffer,commandEncoder);
+    render(computePass,canvas.width, canvas.height);
     computePass.end();
-
-    getMatrices();
-
-    // Rendering pass
-    renderPassDescriptor.colorAttachments[0].view = context
-    .getCurrentTexture()
-    .createView();
-    const renderPass = commandEncoder.beginRenderPass(renderPassDescriptor);
-    renderPass.setPipeline(renderPipeline);
-    renderPass.setBindGroup(0, renderBindGroup);
-    renderPass.setVertexBuffer(0, cubeBuffer);
-    renderPass.draw(36);
-    renderPass.end();
     device.queue.submit([commandEncoder.finish()]);
+    
     setTimeout(() => {
       requestAnimationFrame(frame);
     }, 0);

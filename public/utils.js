@@ -20,7 +20,6 @@ export class ComputeShader {
 
     }
 
-    // Add component dispatchZ for 3D
     computePass(device, pass, entries, dispatchX, dispatchY, dispatchZ) {
         pass.setPipeline(this.pipeline);
         let bindingIndex = 0;
@@ -39,6 +38,29 @@ export class ComputeShader {
                 }
             })}));
         pass.dispatchWorkgroups(dispatchX, dispatchY, dispatchZ);
+        entries.forEach(entry => { if (entry instanceof GridBuffer) entry.swap(); });
+    }
+
+    renderPass(device,pass,entries,dispatchX,dispatchY) {
+        pass.setPipeline(this.pipeline);
+        let bindingIndex = 0;
+        pass.setBindGroup(0, device.createBindGroup({
+            label: this.label,
+            layout: this.pipeline.getBindGroupLayout(0),
+            entries: entries.flatMap(element => {
+                if (element instanceof GridBuffer) {
+                    const bindings = [
+                        { binding: bindingIndex++, resource: { buffer: element.readBuffer } },
+                        { binding: bindingIndex++, resource: { buffer: element.writeBuffer } }
+                    ];
+                    return bindings;
+                } else if (element instanceof GPUTexture){
+                    return { binding: bindingIndex++, resource: element.createView() };
+                } else {
+                    return { binding: bindingIndex++, resource: { buffer: element } };
+                }
+            })}));
+        pass.dispatchWorkgroups(Math.floor(dispatchX), Math.floor(dispatchY));
         entries.forEach(entry => { if (entry instanceof GridBuffer) entry.swap(); });
     }
 }
