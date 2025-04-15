@@ -1,4 +1,5 @@
 import { initialize, gridSize } from './init.js';
+import { handleInputs } from './utils.js';
 
 async function main() {
   const canvas = document.getElementById("gpuCanvas");
@@ -11,15 +12,11 @@ async function main() {
   const {
     device,
     context,
-    gridSizeBuffer,
     timeBuffer,
     explosionLocationBuffer,
     renderModeBuffer,
     cubeBuffer,
-    renderPassDescriptor,
     computeShaders,
-    renderPipeline,
-    renderBindGroup,
     density,
     velocity,
     pressure,
@@ -29,8 +26,9 @@ async function main() {
     projBuffer,
     invMVPBuffer,
     densityTexture,
+    inputBuffers,
     writeTexture,
-    render
+    render,
   } = await initialize(canvas);
 
   function resizeCanvasToDisplaySize(canvas) {
@@ -94,6 +92,8 @@ async function main() {
 
   getMatrices();
 
+  handleInputs(device,inputBuffers);
+
   let previousTime = 0
   let mouseClick = false;
   let workgroup_size = gridSize / 4;
@@ -102,7 +102,7 @@ async function main() {
     const rect = canvas.getBoundingClientRect();
     const mouseX = (event.clientX - rect.left) / rect.width * gridSize;
     const mouseY = (1 - (event.clientY - rect.top) / rect.height) * gridSize;
-    device.queue.writeBuffer(explosionLocationBuffer, 0, new Float32Array([mouseX, mouseY,Math.random() * (40 - 26) + 26]));
+    device.queue.writeBuffer(explosionLocationBuffer, 0, new Float32Array([mouseX, mouseY,Math.random() * (18 - 12) + 12]));
     mouseClick = true;
   });
 
@@ -112,6 +112,7 @@ async function main() {
         device.queue.writeBuffer(renderModeBuffer,0,new Uint32Array([renderModeValue-1]));
     }
   });
+
 
   function passage(device,pass,velocity,density,pressure,divergence,gridSizeBuffer,explosionLocationBuffer,dt,commandEncoder){
     if (mouseClick){
@@ -173,7 +174,7 @@ async function main() {
     // Compute pass for advection
     /* readBuffer(device,density.readBuffer,commandEncoder); */
     const computePass = commandEncoder.beginComputePass();
-    passage(device,computePass,velocity,density,pressure,divergence,gridSizeBuffer,explosionLocationBuffer,timeBuffer,commandEncoder);
+    passage(device,computePass,velocity,density,pressure,divergence,inputBuffers.gridSizeBuffer,explosionLocationBuffer,timeBuffer,commandEncoder);
     render(computePass,canvas.width, canvas.height);
     computePass.end();
     device.queue.submit([commandEncoder.finish()]);

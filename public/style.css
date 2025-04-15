@@ -11,3 +11,14 @@
 body {
     background-color: grey;
 }
+
+.container{
+    display: flex;
+    flex-direction: column;
+    width: 150px;
+    padding: 20px;
+    background-color: rgba(0, 0, 0, 0.384);
+    position: absolute;
+    top: 15px;
+    right: 15px;
+}

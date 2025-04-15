@@ -14,7 +14,7 @@ import {
     cubeVertexCount,
   } from './objects/renderCube.js';
 
-export const gridSize = 64;
+export const gridSize = 32;
 
 export async function loadShader(filePath) {
     const response = await fetch(filePath);
@@ -51,11 +51,31 @@ export async function initialize(canvas) {
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     
+    const absorptionBuffer = device.createBuffer({
+        size: 4, // 32-bit float
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    const scatteringBuffer = device.createBuffer({
+        size: 4, // 32-bit float
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
     const stepSizeBuffer = device.createBuffer({
         size: 4, // 32-bit float
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     
+    const lightStepSizeBuffer = device.createBuffer({
+        size: 4, // 32-bit float
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    const phaseBuffer = device.createBuffer({
+        size: 4, // 32-bit float
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
     const explosionLocationBuffer = device.createBuffer({
         size: 12,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -66,6 +86,11 @@ export async function initialize(canvas) {
         usage: GPUBufferUsage.VERTEX,
         mappedAtCreation: true,
     });
+    
+    device.queue.writeBuffer(stepSizeBuffer, 0, new Float32Array([0.1]));
+    device.queue.writeBuffer(absorptionBuffer, 0, new Float32Array([0.85]));
+    device.queue.writeBuffer(scatteringBuffer, 0, new Float32Array([0.5]));
+    device.queue.writeBuffer(phaseBuffer, 0, new Float32Array([0.8]));
     
     new Float32Array(cubeBuffer.getMappedRange()).set(cubeVertexArray);
     cubeBuffer.unmap();
@@ -106,6 +131,14 @@ export async function initialize(canvas) {
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
     });
 
+    const smokeSampler = device.createSampler({
+        addressModeU: 'clamp-to-edge',
+        addressModeV: 'clamp-to-edge',
+        addressModeW: 'clamp-to-edge',
+        magFilter: 'nearest',
+        minFilter: 'nearest',
+    });
+
     async function readBufferToFloat32Array(device, buffer, size) {
         // Create a buffer for reading the data
         const readBuffer = device.createBuffer({
@@ -135,35 +168,106 @@ export async function initialize(canvas) {
             { bytesPerRow: gridSize * 4, rowsPerImage: gridSize },
             { width: gridSize, height: gridSize, depthOrArrayLayers: gridSize });
     }
+
+    const renderBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0, // Texture
+                visibility: GPUShaderStage.COMPUTE,
+                storageTexture: {
+                    access: "write-only",
+                    format: "rgba8unorm",
+                    viewDimension: "2d"
+                }
+            },
+            {
+                binding: 1,
+                visibility: GPUShaderStage.COMPUTE,
+                texture: {
+                    sampleType: "unfilterable-float",  // or "unfilterable-float" if you're using specific types
+                    viewDimension: "3d",
+                    format: "r32float"
+                }
+            },
+            {
+                binding: 2,
+                visibility: GPUShaderStage.COMPUTE,
+                sampler: {
+                    type: 'non-filtering',
+                },
+            },
+            {
+                binding: 3,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
+            {
+                binding: 4,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
+            {
+                binding: 5,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
+            {
+                binding: 6,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
+            {
+                binding: 7,
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
+        ]
+    })
     
     // Initializing shaders
     const computeShaders = {};
+    const inputBuffers = {
+        absorptionBuffer: absorptionBuffer,
+        scatteringBuffer: scatteringBuffer,
+        stepSizeBuffer: stepSizeBuffer,
+        lightStepSizeBuffer: lightStepSizeBuffer,
+        phaseBuffer: phaseBuffer,
+        gridSizeBuffer: gridSizeBuffer,
+    };
     explosionShader(device,computeShaders);
     advectShader(device,computeShaders);
     velocityAdvectionShader(device,computeShaders);
     divergenceShader(device,computeShaders);
     pressureShader(device,computeShaders);
     gradientSubstractionShader(device,computeShaders);
-    renderingShader(device,computeShaders);
+    renderingShader(device,computeShaders,renderBindGroupLayout);
   
     function render(computePass,canvasWidth,canvasHeight) {
         const texture = context.getCurrentTexture();
         computeShaders.render.renderPass(
             device,
             computePass,
-            [texture, densityTexture],
+            [texture, densityTexture, smokeSampler, stepSizeBuffer, lightStepSizeBuffer, absorptionBuffer, scatteringBuffer, phaseBuffer],
             canvasWidth / 8, canvasHeight / 8);
     }
 
     return {
         device,
         context,
-        gridSizeBuffer,
         timeBuffer,
         explosionLocationBuffer,
         renderModeBuffer,
         cubeBuffer,
-        stepSizeBuffer,
         computeShaders,
         density,
         velocity,
@@ -174,8 +278,9 @@ export async function initialize(canvas) {
         projBuffer,
         invMVPBuffer,
         densityTexture,
+        inputBuffers,
         writeTexture,
-        render
+        render,
     };
 }
   

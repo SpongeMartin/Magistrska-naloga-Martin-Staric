@@ -1,10 +1,24 @@
 import { ComputeShader } from "../utils.js";
 
-export function renderingShader(device, computeShaders) {
+export function renderingShader(device, computeShaders, layout) {
     computeShaders.render = new ComputeShader("render", device, /*wgsl*/`
     @group(0) @binding(0) var texture: texture_storage_2d<rgba8unorm, write>;
     @group(0) @binding(1) var densityTexture: texture_3d<f32>;
+    @group(0) @binding(2) var smokeSampler: sampler;
+    @group(0) @binding(3) var<uniform> uStepSize: f32; // Replace with marching through each block?
+    @group(0) @binding(4) var<uniform> uLightStepSize: f32;
+    @group(0) @binding(5) var<uniform> uAbsorption: f32; // How much density gets absorbed when sampled
+    @group(0) @binding(6) var<uniform> uScattering: f32; // How much light is scattered away from our view
+    @group(0) @binding(7) var<uniform> uPhase: f32;
     //@group(0) @binding(2) var<uniform> renderMode : u32;
+
+    const PI: f32 = 3.141592653589793;
+
+    fn hash(x: f32) -> f32 {
+        let sin_val = sin(x * 12.9898);
+        let hashed = sin_val * 43758.5453;
+        return fract(hashed);
+    }
 
     fn intersectCube(ray_origin: vec3<f32>, ray_dir: vec3<f32>, cube_min: vec3<f32>, cube_max: vec3<f32>) -> vec2<f32> {
         let t_min = (cube_min - ray_origin) / ray_dir;
@@ -15,13 +29,25 @@ export function renderingShader(device, computeShaders) {
         let tFar = min(min(t2.x, t2.y), t2.z);
 
         if (tNear > tFar || tFar < 0.0) {
-            return vec2<f32>(-1.0, -1.0);  // No intersection
+            return vec2<f32>(-1.0, -1.0);
         }
         return vec2<f32>(tNear, tFar);
     }
 
+    fn sample_texture(pos: vec3<f32>, cube_min: vec3<f32>, cube_max: vec3<f32>) -> f32{
+        // Convert from world-space to texture space [0..1]
+        let tex_coords = (pos - cube_min) / (cube_max - cube_min);
+        return textureSampleLevel(densityTexture, smokeSampler, tex_coords, 0.0).r;
+    }
+
+    fn henyey_greenstein(g: f32, cos_theta: f32) -> f32{
+        let denom = max(1e-4, 1.0 + g * g - 2.0 * g * cos_theta);
+        return 1.0 / (4.0 * PI) * (1.0 - g * g) / (denom * sqrt(denom));
+    }
+
     @compute @workgroup_size(8, 8)
     fn compute(@builtin(global_invocation_id) globalId: vec3u) {
+        let nothing = uLightStepSize;
         let index = globalId.xy;
         let size = textureDimensions(texture);
         if (index.x >= size.x || index.y >= size.y) {
@@ -29,10 +55,12 @@ export function renderingShader(device, computeShaders) {
         }
 
         let camera_origin = vec3(0.0);
-        let cube_min = vec3(-1.0,-1.0,-1.0);
+        let cube_min = vec3(-1.0,-1.0,-1.2);
         let cube_max = vec3(1.0,1.0,-3.0);
-        let absorption_coefficient = 0.2;
-        let scatter = vec3(0.3);
+        let extinction = uAbsorption + uScattering;
+        let scatter = vec3(1.0);
+        let li_color = vec3(1.0);
+        let li_pos = vec3(3.0,-3.0,-3.0);
 
         let uv = (vec2<f32>(index) / vec2<f32>(size)) * 2.0 - vec2<f32>(1.0);
         
@@ -41,40 +69,54 @@ export function renderingShader(device, computeShaders) {
 
         let t_bounds = intersectCube(camera_origin, ray_dir, cube_min, cube_max);
 
-        let background_color = vec3<f32>(0.572, 0.772, 0.921);
-        var color = background_color;
+        var t = max(t_bounds.x, 0.0);
+        let t_end = t_bounds.y;
+        var transmittance = 1.0;
+        var final_color = vec3<f32>(0.0,0.0,0.0);
+        
+        let offset = hash(f32(globalId.x) + f32(globalId.y) * f32(size.x));
+        t += uStepSize * offset;
 
-        if (t_bounds.x >= 0.0 && t_bounds.y >= 0.0) {
-            let p1 = camera_origin + ray_dir * t_bounds.x;
-            let p2 = camera_origin + ray_dir * t_bounds.y;
+        while (t < t_end) {
+            let pos = camera_origin + ray_dir * t;
+            let li_dir = normalize(li_pos - pos);
+            var li_density = 0.0;
+            let li_end = intersectCube(pos, li_dir, cube_min, cube_max);
+            let density = sample_texture(pos, cube_min, cube_max);
 
-            var accumulated_transmission = 1.0;
-            let step_size = 0.05;
-            var t = t_bounds.x;
-
-            while (t < t_bounds.y) {
-                let ray_pos = camera_origin + ray_dir * t;
-
-                // Map the ray position to texture coordinates
-                let tex_coords = (ray_pos - cube_min) / (cube_max - cube_min);  // Normalize to [0, 1]
-                let tex_size = textureDimensions(densityTexture);
-                let tex_index = vec3<i32>(tex_coords * vec3<f32>(tex_size));
-
-                let density = textureLoad(densityTexture, tex_index, 0).r * 5; // Texture sample menjaj
-
-
-                let attenuation = exp(-density * absorption_coefficient * step_size);
-                accumulated_transmission *= attenuation;
-                color = color * accumulated_transmission + scatter * (1.0 - accumulated_transmission);
-
-                t += step_size;
-
-                if (accumulated_transmission < 0.01) {
-                    break;
+            let absorption = uAbsorption * density;
+            transmittance *= exp(-uStepSize * absorption * extinction);
+            
+            if (li_end.y > 0.0 && density > 0.0) {
+                let numSteps = 16;
+                let cube_exit = pos + li_dir * li_end.y;
+                let liStepSize = distance(pos, cube_exit) / f32(numSteps);
+    
+                for (var i = 0; i < numSteps; i++) {
+                    let liPos = pos + li_dir * liStepSize * f32(i);
+                    li_density += sample_texture(liPos, cube_min, cube_max);
+                    if (li_density > 1.0) {
+                        break;
+                    }
                 }
-            }
-        }
 
-        textureStore(texture, index, vec4<f32>(color, 1.0));
-    }`);
+                let cos_theta = dot(ray_dir, li_dir);
+                let li_transmittance = exp(-li_density * liStepSize * extinction);
+                final_color += scatter *       // light color
+                            li_transmittance *     // light ray transmission value
+                            //henyey_greenstein(uPhase, cos_theta) * 10 * // phase function not useful for now?
+                            uScattering *           // scattering coefficient
+                            transmittance *      // ray current transmission value
+                            uStepSize *
+                            density;
+            }
+    
+            if (transmittance < 0.01) { // Roulette?
+                break;
+            }
+            t += uStepSize;
+        }
+        let color = vec4<f32>(final_color, 1.0 - transmittance);
+        textureStore(texture, index, color);
+    }`, device.createPipelineLayout({ bindGroupLayouts: [layout] }));
 }

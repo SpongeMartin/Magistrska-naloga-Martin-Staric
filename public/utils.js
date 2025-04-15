@@ -4,12 +4,13 @@ export class ComputeShader {
      * @param {string} label - A label for identifying the shader.
      * @param {GPUDevice} device - The GPU device used to create buffers.
      * @param {string} code - The WGSL code for the shader.
+     * @param {BindGroupLayout} code - The WGSL code for the shader.
      */
-    constructor(label, device, code) {
+    constructor(label, device, code, my_layout = "auto") {
         this.label = label;
         this.pipeline = device.createComputePipeline({
             label,
-            layout: 'auto',
+            layout: my_layout,
             compute: {
                 module: device.createShaderModule({
                     label,
@@ -17,7 +18,6 @@ export class ComputeShader {
                 })
             },
         });
-
     }
 
     computePass(device, pass, entries, dispatchX, dispatchY, dispatchZ) {
@@ -56,6 +56,8 @@ export class ComputeShader {
                     return bindings;
                 } else if (element instanceof GPUTexture){
                     return { binding: bindingIndex++, resource: element.createView() };
+                } else if (element instanceof GPUSampler){
+                    return { binding: bindingIndex++, resource: element };
                 } else {
                     return { binding: bindingIndex++, resource: { buffer: element } };
                 }
@@ -132,3 +134,57 @@ export function borderControl(in_arr,out_arr,out_val, fun_name ="borderControl")
             }
         }
     `};
+
+export function handleInputs(device, inputBuffers) {
+    const stepInput = document.getElementById('stepSize');
+    const gridInput = document.getElementById('grid');
+    const absorptionInput = document.getElementById('absorption');
+    const scatteringInput = document.getElementById('scattering');
+    const phaseInput = document.getElementById('phase');
+    const lightInput = document.getElementById('light-step');
+
+    const stepDisplay = document.getElementById('stepVal');
+    const gridDisplay = document.getElementById('gridVal');
+    const absorptionDisplay = document.getElementById('absorptionVal');
+    const scatteringDisplay = document.getElementById('scatteringVal');
+    const phaseDisplay = document.getElementById('phaseVal');
+    const lightDisplay = document.getElementById('light-stepVal');
+
+    let stepSize = parseFloat(stepInput.value);
+    let gridSize = parseFloat(gridInput.value);
+    let absorption = parseFloat(absorptionInput.value);
+    let scattering = parseFloat(scatteringInput.value);
+    let phase = parseFloat(phaseInput.value);
+    let lightSize = parseFloat(lightInput.value);
+
+    stepInput.addEventListener('input', (e) => {
+        stepSize = parseFloat(e.target.value);
+        stepDisplay.textContent = stepSize;
+        device.queue.writeBuffer(inputBuffers.stepSizeBuffer, 0, new Float32Array([stepSize]));
+    });
+    gridInput.addEventListener('input', (e) => {
+        gridSize = parseFloat(e.target.value);
+        gridDisplay.textContent = gridSize;
+        device.queue.writeBuffer(inputBuffers.gridSizeBuffer, 0, new Float32Array([gridSize]));
+    });
+    absorptionInput.addEventListener('input', (e) => {
+        absorption = parseFloat(e.target.value);
+        absorptionDisplay.textContent = absorption;
+        device.queue.writeBuffer(inputBuffers.absorptionBuffer, 0, new Float32Array([absorption]));
+    });
+    scatteringInput.addEventListener('input', (e) => {
+        scattering = parseFloat(e.target.value);
+        scatteringDisplay.textContent = scattering;
+        device.queue.writeBuffer(inputBuffers.scatteringBuffer, 0, new Float32Array([scattering]));
+    });
+    phaseInput.addEventListener('input', (e) => {
+        phase = parseFloat(e.target.value);
+        phaseDisplay.textContent = phase;
+        device.queue.writeBuffer(inputBuffers.phaseBuffer, 0, new Float32Array([phase]));
+    });
+    lightInput.addEventListener('input', (e) => {
+        lightSize = parseFloat(e.target.value);
+        lightDisplay.textContent = lightSize;
+        device.queue.writeBuffer(inputBuffers.lightStepSizeBuffer, 0, new Float32Array([lightSize]));
+    });
+}
