@@ -41,7 +41,7 @@ export function diffuseShader(device, computeShaders) {
         let xAlpha = viscosity * dt * f32(gridSize2);
         let xBeta = 1 / (1 + 6 * xAlpha);
         
-        density_out[idx] = (xC + xAlpha * (xL + xR + xB + xT + xF + xBa)) * xBeta;
+        //density_out[idx] = (xC + xAlpha * (xL + xR + xB + xT + xF + xBa)) * xBeta;
         
         // Temperature
 

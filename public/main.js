@@ -88,13 +88,13 @@ async function main() {
       mouseClick = false;
     }
 
-    /* for (let i = 0; i < 10; i++){
+    for (let i = 0; i < 30; i++){
       computeShaders.diffuse.computePass(
         device,
         pass,
         [density, temperature, gridSizeBuffer, dt, viscosityBuffer, tViscosityBuffer],
         workgroup_size,workgroup_size,workgroup_size);
-    } */
+    }
 
     computeShaders.velocity.computePass(
       device,
