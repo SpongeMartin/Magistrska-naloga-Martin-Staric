@@ -13,6 +13,7 @@ import {
     cubePositionOffset,
     cubeVertexCount,
   } from './objects/renderCube.js';
+import { diffuseShader } from "./shaders/diffuse.js";
 
 export const gridSize = 32;
 
@@ -26,7 +27,7 @@ export async function loadShader(filePath) {
   
 export async function initialize(canvas) {
     const adapter = await navigator.gpu.requestAdapter();
-    const device = await adapter.requestDevice();
+    const device = await adapter.requestDevice({requiredFeatures: ["float32-filterable"]});
     const context = canvas.getContext("webgpu");
     const format = "rgba8unorm";
     const usage =
@@ -75,6 +76,21 @@ export async function initialize(canvas) {
         size: 4, // 32-bit float
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+    
+    const viscosityBuffer = device.createBuffer({
+        size: 4, // 32-bit float
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    
+    const decayBuffer = device.createBuffer({
+        size: 4, // 32-bit float
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    
+    const tViscosityBuffer = device.createBuffer({
+        size: 4, // 32-bit float
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
 
     const explosionLocationBuffer = device.createBuffer({
         size: 12,
@@ -87,10 +103,14 @@ export async function initialize(canvas) {
         mappedAtCreation: true,
     });
     
-    device.queue.writeBuffer(stepSizeBuffer, 0, new Float32Array([0.1]));
-    device.queue.writeBuffer(absorptionBuffer, 0, new Float32Array([0.85]));
-    device.queue.writeBuffer(scatteringBuffer, 0, new Float32Array([0.5]));
-    device.queue.writeBuffer(phaseBuffer, 0, new Float32Array([0.8]));
+    device.queue.writeBuffer(stepSizeBuffer, 0, new Float32Array([0.05]));
+    device.queue.writeBuffer(absorptionBuffer, 0, new Float32Array([0.35]));
+    device.queue.writeBuffer(scatteringBuffer, 0, new Float32Array([12.0]));
+    device.queue.writeBuffer(phaseBuffer, 0, new Float32Array([0.2]));
+    device.queue.writeBuffer(viscosityBuffer, 0, new Float32Array([0.0000001]));
+    device.queue.writeBuffer(decayBuffer, 0, new Float32Array([0.999]));
+
+    device.queue.writeBuffer(tViscosityBuffer, 0, new Float32Array([0.000001]));
     
     new Float32Array(cubeBuffer.getMappedRange()).set(cubeVertexArray);
     cubeBuffer.unmap();
@@ -124,7 +144,16 @@ export async function initialize(canvas) {
 
     const pressure = new GridBuffer("pressure", device, gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
 
-    const densityTexture = device.createTexture({
+    const temperature = new GridBuffer("temperature", device, gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
+
+    const smokeTexture = device.createTexture({
+        size: [gridSize, gridSize, gridSize],
+        format: "r32float", // 32-bit float for density values
+        dimension: "3d",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
+    });
+    
+    const temperatureTexture = device.createTexture({
         size: [gridSize, gridSize, gridSize],
         format: "r32float", // 32-bit float for density values
         dimension: "3d",
@@ -135,8 +164,16 @@ export async function initialize(canvas) {
         addressModeU: 'clamp-to-edge',
         addressModeV: 'clamp-to-edge',
         addressModeW: 'clamp-to-edge',
-        magFilter: 'nearest',
-        minFilter: 'nearest',
+        magFilter: 'linear', // Enables trilinear sampling
+        minFilter: 'linear',
+    });
+    
+    const temperatureSampler = device.createSampler({
+        addressModeU: 'clamp-to-edge',
+        addressModeV: 'clamp-to-edge',
+        addressModeW: 'clamp-to-edge',
+        magFilter: 'linear', // Enables trilinear sampling
+        minFilter: 'linear',
     });
 
     async function readBufferToFloat32Array(device, buffer, size) {
@@ -172,7 +209,7 @@ export async function initialize(canvas) {
     const renderBindGroupLayout = device.createBindGroupLayout({
         entries: [
             {
-                binding: 0, // Texture
+                binding: 0, // Canvas Texture
                 visibility: GPUShaderStage.COMPUTE,
                 storageTexture: {
                     access: "write-only",
@@ -181,51 +218,67 @@ export async function initialize(canvas) {
                 }
             },
             {
-                binding: 1,
+                binding: 1, // Smoke texture
                 visibility: GPUShaderStage.COMPUTE,
                 texture: {
-                    sampleType: "unfilterable-float",  // or "unfilterable-float" if you're using specific types
+                    sampleType: "float",
                     viewDimension: "3d",
                     format: "r32float"
                 }
             },
             {
-                binding: 2,
+                binding: 2, // Smoke trilinear sampler
                 visibility: GPUShaderStage.COMPUTE,
                 sampler: {
-                    type: 'non-filtering',
+                    type: 'filtering',
                 },
             },
             {
-                binding: 3,
+                binding: 3, // Temperature texture
+                visibility: GPUShaderStage.COMPUTE,
+                texture: {
+                    sampleType: "float",
+                    viewDimension: "3d",
+                    format: "r32float"
+                }
+            },
+            {
+                binding: 4, // Temperature trilinear sampler
+                visibility: GPUShaderStage.COMPUTE,
+                sampler: {
+                    type: 'filtering',
+                },
+            },
+            {
+                binding: 5, // Ray Marching Step Size
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {
                     type: "uniform",
                 },
             },
             {
-                binding: 4,
+                binding: 6, // Ray Marching Step Size Toward Light
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {
                     type: "uniform",
                 },
             },
             {
-                binding: 5,
+                binding: 7, // Absorption coefficient
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {
                     type: "uniform",
                 },
             },
             {
-                binding: 6,
+                binding: 8, // Scattering coefficient
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {
                     type: "uniform",
                 },
             },
             {
-                binding: 7,
+                binding: 9, // Phase
                 visibility: GPUShaderStage.COMPUTE,
                 buffer: {
                     type: "uniform",
@@ -246,6 +299,7 @@ export async function initialize(canvas) {
     };
     explosionShader(device,computeShaders);
     advectShader(device,computeShaders);
+    diffuseShader(device,computeShaders);
     velocityAdvectionShader(device,computeShaders);
     divergenceShader(device,computeShaders);
     pressureShader(device,computeShaders);
@@ -257,7 +311,7 @@ export async function initialize(canvas) {
         computeShaders.render.renderPass(
             device,
             computePass,
-            [texture, densityTexture, smokeSampler, stepSizeBuffer, lightStepSizeBuffer, absorptionBuffer, scatteringBuffer, phaseBuffer],
+            [texture, smokeTexture, smokeSampler, temperatureTexture, temperatureSampler, stepSizeBuffer, lightStepSizeBuffer, absorptionBuffer, scatteringBuffer, phaseBuffer],
             canvasWidth / 8, canvasHeight / 8);
     }
 
@@ -267,17 +321,22 @@ export async function initialize(canvas) {
         timeBuffer,
         explosionLocationBuffer,
         renderModeBuffer,
+        decayBuffer,
+        viscosityBuffer,
+        tViscosityBuffer,
         cubeBuffer,
         computeShaders,
         density,
         velocity,
         pressure,
         divergence,
+        temperature,
         modelBuffer,
         viewBuffer,
         projBuffer,
         invMVPBuffer,
-        densityTexture,
+        smokeTexture,
+        temperatureTexture,
         inputBuffers,
         writeTexture,
         render,

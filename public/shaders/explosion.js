@@ -5,8 +5,9 @@ export function explosionShader(device, computeShaders) {
     @group(0) @binding(0) var<storage, read_write> velocity : array<vec3<f32>>;
     @group(0) @binding(1) var<storage, read_write> density : array<f32>;
     @group(0) @binding(2) var<storage, read_write> pressure : array<f32>;
-    @group(0) @binding(3) var<uniform> explosionPos : vec3<f32>;
-    @group(0) @binding(4) var<uniform> gridSize : u32;
+    @group(0) @binding(3) var<storage, read_write> temperature : array<f32>;
+    @group(0) @binding(4) var<uniform> explosionPos : vec3<f32>;
+    @group(0) @binding(5) var<uniform> gridSize : u32;
 
     @compute @workgroup_size(4,4,4)
     fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -22,6 +23,7 @@ export function explosionShader(device, computeShaders) {
         let strength = 5.0; // How much force is applied
         let dissipate = 1.0;
         let density_factor = 0.05;
+        let temp_factor = 0.10;
 
         let atLeft = (x == 0);
         let atRight = (x == gridSize - 1);
@@ -37,6 +39,9 @@ export function explosionShader(device, computeShaders) {
 
             let densityIncrease = 3.0 * (1.0 - dist / rad);
             density[idx] += densityIncrease * density_factor;
+
+            let temperatureIncrease = 3.0 * (1.0 - dist / rad);
+            temperature[idx] += temperatureIncrease * temp_factor;
 
             let pressureIncrease = 1.0 * (1.0 - dist / rad);
             pressure[idx] += pressureIncrease;

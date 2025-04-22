@@ -7,6 +7,7 @@ export function advectShader(device, computeShaders) {
     @group(0) @binding(2) var<storage, read_write> density_out : array<f32>;
     @group(0) @binding(3) var<uniform> gridSize : u32;
     @group(0) @binding(4) var<uniform> dt : f32;
+    @group(0) @binding(5) var<uniform> decay : f32;
 
     ${borderControl("density_in","density_out","0")}
 
@@ -61,7 +62,7 @@ export function advectShader(device, computeShaders) {
         var result: f32 = 0.0;
         let idx: u32 = x + y * gridSize + z * gridSize * gridSize;
         let advectedDensity: f32 = advect(idx, f32(x), f32(y), f32(z));
-        result = advectedDensity * 0.999;
+        result = advectedDensity * decay;
 
         density_out[idx] = result;
 

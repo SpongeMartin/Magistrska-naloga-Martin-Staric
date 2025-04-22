@@ -28,7 +28,7 @@ export function pressureShader(device, computeShaders) {
         
         let rBeta = 1.0/6.0; // reciporal (neighbour contribution?)
         let alpha = -1.0; // unit grid scaling? todo
-        // evaluate Jacobi iteration
+        // evaluate Jacobi iteration TODO: Replace with Conjugate.
         let pressureResult = (xL + xR + xB + xT + xF + xBa + alpha * div) * rBeta;
 
         pressure_out[idx] = pressureResult;

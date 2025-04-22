@@ -3,16 +3,18 @@ import { ComputeShader } from "../utils.js";
 export function renderingShader(device, computeShaders, layout) {
     computeShaders.render = new ComputeShader("render", device, /*wgsl*/`
     @group(0) @binding(0) var texture: texture_storage_2d<rgba8unorm, write>;
-    @group(0) @binding(1) var densityTexture: texture_3d<f32>;
+    @group(0) @binding(1) var smokeTexture: texture_3d<f32>;
     @group(0) @binding(2) var smokeSampler: sampler;
-    @group(0) @binding(3) var<uniform> uStepSize: f32; // Replace with marching through each block?
-    @group(0) @binding(4) var<uniform> uLightStepSize: f32;
-    @group(0) @binding(5) var<uniform> uAbsorption: f32; // How much density gets absorbed when sampled
-    @group(0) @binding(6) var<uniform> uScattering: f32; // How much light is scattered away from our view
-    @group(0) @binding(7) var<uniform> uPhase: f32;
+    @group(0) @binding(3) var temperatureTexture: texture_3d<f32>;
+    @group(0) @binding(4) var temperatureSampler: sampler;
+    @group(0) @binding(5) var<uniform> uStepSize: f32; // Replace with marching through each block?
+    @group(0) @binding(6) var<uniform> uLightStepSize: f32;
+    @group(0) @binding(7) var<uniform> uAbsorption: f32; // How much density gets absorbed when sampled
+    @group(0) @binding(8) var<uniform> uScattering: f32; // How much light is scattered away from our view
+    @group(0) @binding(9) var<uniform> uPhase: f32;
     //@group(0) @binding(2) var<uniform> renderMode : u32;
 
-    const PI: f32 = 3.141592653589793;
+    const PI: f32 = radians(180);
 
     fn hash(x: f32) -> f32 {
         let sin_val = sin(x * 12.9898);
@@ -34,15 +36,25 @@ export function renderingShader(device, computeShaders, layout) {
         return vec2<f32>(tNear, tFar);
     }
 
-    fn sample_texture(pos: vec3<f32>, cube_min: vec3<f32>, cube_max: vec3<f32>) -> f32{
+    fn sample_texture(pos: vec3<f32>, cube_min: vec3<f32>, cube_max: vec3<f32>, texture: texture_3d<f32>, sampler: sampler) -> f32{
         // Convert from world-space to texture space [0..1]
         let tex_coords = (pos - cube_min) / (cube_max - cube_min);
-        return textureSampleLevel(densityTexture, smokeSampler, tex_coords, 0.0).r;
+        return textureSampleLevel(texture, sampler, tex_coords, 0.0).r;
     }
 
     fn henyey_greenstein(g: f32, cos_theta: f32) -> f32{
         let denom = max(1e-4, 1.0 + g * g - 2.0 * g * cos_theta);
         return 1.0 / (4.0 * PI) * (1.0 - g * g) / (denom * sqrt(denom));
+    }
+
+    fn temperature_to_color(temperature: f32) -> vec3<f32> {
+        let minTemp = 0.0;
+        let maxTemp = 1.0;
+        
+        let t = clamp((temperature - minTemp) / (maxTemp - minTemp), 0.0, 1.0);
+
+        let color = mix(vec3(1.0, 1.0, 1.0), vec3(1.0, 0.0, 0.0), t);  // White to red
+        return color;
     }
 
     @compute @workgroup_size(8, 8)
@@ -74,7 +86,7 @@ export function renderingShader(device, computeShaders, layout) {
         var transmittance = 1.0;
         var final_color = vec3<f32>(0.0,0.0,0.0);
         
-        let offset = hash(f32(globalId.x) + f32(globalId.y) * f32(size.x));
+        let offset = hash(f32(index.x) + f32(index.y) * f32(size.x));
         t += uStepSize * offset;
 
         while (t < t_end) {
@@ -82,7 +94,8 @@ export function renderingShader(device, computeShaders, layout) {
             let li_dir = normalize(li_pos - pos);
             var li_density = 0.0;
             let li_end = intersectCube(pos, li_dir, cube_min, cube_max);
-            let density = sample_texture(pos, cube_min, cube_max);
+            let density = sample_texture(pos, cube_min, cube_max, smokeTexture, smokeSampler);
+            let temperature = sample_texture(pos, cube_min, cube_max, temperatureTexture, temperatureSampler);
 
             let absorption = uAbsorption * density;
             transmittance *= exp(-uStepSize * absorption * extinction);
@@ -94,7 +107,7 @@ export function renderingShader(device, computeShaders, layout) {
     
                 for (var i = 0; i < numSteps; i++) {
                     let liPos = pos + li_dir * liStepSize * f32(i);
-                    li_density += sample_texture(liPos, cube_min, cube_max);
+                    li_density += sample_texture(liPos, cube_min, cube_max, smokeTexture, smokeSampler);
                     if (li_density > 1.0) {
                         break;
                     }
@@ -102,17 +115,20 @@ export function renderingShader(device, computeShaders, layout) {
 
                 let cos_theta = dot(ray_dir, li_dir);
                 let li_transmittance = exp(-li_density * liStepSize * extinction);
-                final_color += scatter *       // light color
-                            li_transmittance *     // light ray transmission value
-                            //henyey_greenstein(uPhase, cos_theta) * 10 * // phase function not useful for now?
+                final_color += scatter *            // light color
+                            li_transmittance *      // light ray transmission value
+                            henyey_greenstein(uPhase, cos_theta) * 7 * // phase function
                             uScattering *           // scattering coefficient
-                            transmittance *      // ray current transmission value
+                            transmittance *         // ray current transmission value
                             uStepSize *
+                            temperature_to_color(temperature) *
                             density;
             }
     
-            if (transmittance < 0.01) { // Roulette?
-                break;
+            if (transmittance < 0.01) { // Roulette
+                if (hash((transmittance * 10.0) + f32(index.x) + f32(index.y) * f32(size.x)) > 0.25){
+                    break;
+                }
             }
             t += uStepSize;
         }
