@@ -11,6 +11,9 @@ export function diffuseShader(device, computeShaders) {
     @group(0) @binding(6) var<uniform> viscosity : f32;
     @group(0) @binding(7) var<uniform> t_viscosity : f32;
 
+    ${borderControl("density_in", "density_out", "0")}
+    ${borderControl("temperature_in", "temperature_out", "0", "temp_border")}
+
     @compute @workgroup_size(4,4,4)
     fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
         let x = global_id.x;
@@ -38,10 +41,12 @@ export function diffuseShader(device, computeShaders) {
 
         let xC = density_in[idx];
 
-        let xAlpha = viscosity * dt * f32(gridSize2);
+        let xAlpha = fract(viscosity) * dt * f32(gridSize2);
         let xBeta = 1 / (1 + 6 * xAlpha);
         
-        //density_out[idx] = (xC + xAlpha * (xL + xR + xB + xT + xF + xBa)) * xBeta;
+        density_out[idx] = (xC + xAlpha * (xL + xR + xB + xT + xF + xBa)) * xBeta;
+
+        borderControl(1, x, y, z, idx);
         
         // Temperature
 
@@ -54,9 +59,11 @@ export function diffuseShader(device, computeShaders) {
 
         let tC = temperature_in[idx];
 
-        let tAlpha = t_viscosity * dt * f32(gridSize2);
+        let tAlpha = fract(t_viscosity) * dt * f32(gridSize2);
         let tBeta = 1 / (1 + 6 * tAlpha);
         
         temperature_out[idx] = (tC + tAlpha * (tL + tR + tB + tT + tF + tBa)) * tBeta;
+
+        temp_border(1, x, y, z, idx);
     }`);
 }

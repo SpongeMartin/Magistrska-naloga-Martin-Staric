@@ -3,15 +3,16 @@ import { ComputeShader } from "../utils.js";
 export function renderingShader(device, computeShaders, layout) {
     computeShaders.render = new ComputeShader("render", device, /*wgsl*/`
     @group(0) @binding(0) var texture: texture_storage_2d<rgba8unorm, write>;
-    @group(0) @binding(1) var smokeTexture: texture_3d<f32>;
-    @group(0) @binding(2) var smokeSampler: sampler;
-    @group(0) @binding(3) var temperatureTexture: texture_3d<f32>;
-    @group(0) @binding(4) var temperatureSampler: sampler;
-    @group(0) @binding(5) var<uniform> uStepSize: f32; // Replace with marching through each block?
-    @group(0) @binding(6) var<uniform> uLightStepSize: f32;
-    @group(0) @binding(7) var<uniform> uAbsorption: f32; // How much density gets absorbed when sampled
-    @group(0) @binding(8) var<uniform> uScattering: f32; // How much light is scattered away from our view
-    @group(0) @binding(9) var<uniform> uPhase: f32;
+    @group(0) @binding(1) var readTexture: texture_storage_2d<rgba8unorm, read>;
+    @group(0) @binding(2) var smokeTexture: texture_3d<f32>;
+    @group(0) @binding(3) var smokeSampler: sampler;
+    @group(0) @binding(4) var temperatureTexture: texture_3d<f32>;
+    @group(0) @binding(5) var temperatureSampler: sampler;
+    @group(0) @binding(6) var<uniform> uStepSize: f32; // Replace with marching through each block?
+    @group(0) @binding(7) var<uniform> uLightStepSize: f32;
+    @group(0) @binding(8) var<uniform> uAbsorption: f32; // How much density gets absorbed when sampled
+    @group(0) @binding(9) var<uniform> uScattering: f32; // How much light is scattered away from our view
+    @group(0) @binding(10) var<uniform> uPhase: f32;
     //@group(0) @binding(2) var<uniform> renderMode : u32;
 
     const PI: f32 = radians(180);
@@ -53,7 +54,7 @@ export function renderingShader(device, computeShaders, layout) {
         
         let t = clamp((temperature - minTemp) / (maxTemp - minTemp), 0.0, 1.0);
 
-        let color = mix(vec3(1.0, 1.0, 1.0), vec3(1.0, 0.0, 0.0), t);  // White to red
+        let color = mix(vec3(1.0, 1.0, 1.0), vec3(3.5, 0.8, 0.0), t);  // White to red
         return color;
     }
 
@@ -67,7 +68,7 @@ export function renderingShader(device, computeShaders, layout) {
         }
 
         let camera_origin = vec3(0.0);
-        let cube_min = vec3(-1.0,-1.0,-1.2);
+        let cube_min = vec3(-1.0,-1.0,-2.0);
         let cube_max = vec3(1.0,1.0,-3.0);
         let extinction = uAbsorption + uScattering;
         let scatter = vec3(1.0);
@@ -84,7 +85,7 @@ export function renderingShader(device, computeShaders, layout) {
         var t = max(t_bounds.x, 0.0);
         let t_end = t_bounds.y;
         var transmittance = 1.0;
-        var final_color = vec3<f32>(0.0,0.0,0.0);
+        var final_color = textureLoad(readTexture, vec2i(i32(index.x), i32(index.y))).xyz;
         
         let offset = hash(f32(index.x) + f32(index.y) * f32(size.x));
         t += uStepSize * offset;

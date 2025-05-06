@@ -16,7 +16,7 @@ export function velocityAdvectionShader(device, computeShaders) {
         let prevTemperature = sample_temperature_at(prevPos);
 
         let temperatureGradient = vec3<f32>(0.0, -1.0, 0.0); // Fix renderer so it works in z direction
-        let buoyancy_strength = 0.001;
+        let buoyancy_strength = 0.8;
         let buoyancyForce = buoyancy_strength * prevTemperature * temperatureGradient;
 
         return vec3<f32>(sample_velocity_at(prevPos,0),sample_velocity_at(prevPos,1),sample_velocity_at(prevPos,2)) + buoyancyForce;
@@ -92,11 +92,10 @@ export function velocityAdvectionShader(device, computeShaders) {
         let y: u32 = global_id.y;
         let z: u32 = global_id.z;
 
-        var result: vec3<f32> = vec3<f32>(0.0,0.0,0.0);
         let idx: u32 = x + y * gridSize + z * gridSize * gridSize;
         let advectedVelocity: vec3<f32> = self_advection(idx, f32(x), f32(y), f32(z));
 
-        velocity_out[idx] = advectedVelocity * 0.999; //* 0.999;
+        velocity_out[idx] = advectedVelocity * 0.999; // Velocity decays!
 
         borderControl(1, x, y, z, idx);
     }`);

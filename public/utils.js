@@ -1,3 +1,5 @@
+import { shaderInit } from "./shaders/shaderInit.js";
+
 export class ComputeShader {
     /**
      * Creates an instance of Compute shader. Also takes care of the binding process and dispatching process.
@@ -73,29 +75,43 @@ export class GridBuffer {
      * @param {string} label - A label for identifying the buffer.
      * @param {GPUDevice} device - The GPU device used to create buffers.
      * @param {number} size - The size of the buffer in bytes.
+     * @param {number} components - The number of components in each cell. Default = 1.
      */
-    constructor(label,device,size) {
+    constructor(label,device,size, components = 1) {
+        this.components = components;
         this.readBuffer = device.createBuffer({
-            size: size,
+            size: size * size * size * components * Float32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
         });
 
         this.writeBuffer = device.createBuffer({
-            size: size,
+            size: size * size * size * components * Float32Array.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
         });
 
         this.label = label;
     }
 
-    swap(){
+    swap() {
         let tmp = this.readBuffer;
         this.readBuffer = this.writeBuffer;
         this.writeBuffer = tmp;
     }
+
+    reset(device, size = 32) {
+        this.readBuffer = device.createBuffer({
+            size: size * size * size * this.components * Float32Array.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+
+        this.writeBuffer = device.createBuffer({
+            size: size * size * size * this.components * Float32Array.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
+        });
+    }
 }
 
-export function borderControl(in_arr,out_arr,out_val, fun_name ="borderControl"){ 
+export function borderControl(in_arr,out_arr,out_val, fun_name = "borderControl"){ 
     // Make a function for wgsl, where the first parameter chooses the type of value there will be on the border of the simulation. 
     // 0 = copy value from inside the simulation to the border.
     // else = border values are 0.
@@ -135,7 +151,7 @@ export function borderControl(in_arr,out_arr,out_val, fun_name ="borderControl")
         }
     `};
 
-export function handleInputs(device, inputBuffers) {
+export function handleInputs(device, inputBuffers, gridBuffers, gridSize, computeShaders) {
     const stepInput = document.getElementById('stepSize');
     const gridInput = document.getElementById('grid');
     const absorptionInput = document.getElementById('absorption');
@@ -151,7 +167,7 @@ export function handleInputs(device, inputBuffers) {
     const lightDisplay = document.getElementById('light-stepVal');
 
     let stepSize = parseFloat(stepInput.value);
-    let gridSize = parseFloat(gridInput.value);
+    gridSize = parseFloat(gridInput.value);
     let absorption = parseFloat(absorptionInput.value);
     let scattering = parseFloat(scatteringInput.value);
     let phase = parseFloat(phaseInput.value);
@@ -165,7 +181,7 @@ export function handleInputs(device, inputBuffers) {
     gridInput.addEventListener('input', (e) => {
         gridSize = parseFloat(e.target.value);
         gridDisplay.textContent = gridSize;
-        device.queue.writeBuffer(inputBuffers.gridSizeBuffer, 0, new Float32Array([gridSize]));
+        resetGrid(device, gridSize, gridBuffers, inputBuffers.gridSizeBuffer, computeShaders);
     });
     absorptionInput.addEventListener('input', (e) => {
         absorption = parseFloat(e.target.value);
@@ -187,4 +203,42 @@ export function handleInputs(device, inputBuffers) {
         lightDisplay.textContent = lightSize;
         device.queue.writeBuffer(inputBuffers.lightStepSizeBuffer, 0, new Float32Array([lightSize]));
     });
+}
+
+export function resetGrid(device, gridSize, gridBuffers, gridSizeBuffer, computeShaders) {
+    Object.entries(gridBuffers).forEach(([_,gridBuffer]) => {
+        gridBuffer.reset(device,gridSize);
+    });
+    device.queue.writeBuffer(gridSizeBuffer, 0, new Uint32Array([gridSize]));
+    shaderInit(device,computeShaders);
+}
+
+export async function readBufferToFloat32Array(device, buffer, size) {
+    // Create a buffer for reading the data
+    const readBuffer = device.createBuffer({
+        size: size,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,  // Copyable and readable
+    });
+
+    // Copy the GPU buffer data into the readable buffer
+    const commandEncoder = device.createCommandEncoder();
+    commandEncoder.copyBufferToBuffer(buffer, 0, readBuffer, 0, size);
+    device.queue.submit([commandEncoder.finish()]);
+
+    // Map the buffer and read the data
+    await readBuffer.mapAsync(GPUMapMode.READ);
+    const arrayBuffer = readBuffer.getMappedRange();
+    const floatArray = new Float32Array(arrayBuffer.slice(0));
+
+    readBuffer.unmap();
+    return floatArray;
+}
+
+export async function writeTexture(device, tex, data, gridSize){
+    let arr = await readBufferToFloat32Array(device,data,gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
+    device.queue.writeTexture(
+        { texture: tex },
+        arr,
+        { bytesPerRow: gridSize * 4, rowsPerImage: gridSize },
+        { width: gridSize, height: gridSize, depthOrArrayLayers: gridSize });
 }

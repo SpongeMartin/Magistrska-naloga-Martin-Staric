@@ -20,7 +20,7 @@ export function explosionShader(device, computeShaders) {
         let toCell = cellPos - explosionPos;
         let dist = length(toCell);
         let rad = 10.0; // Effected area
-        let strength = 5.0; // How much force is applied
+        let strength = 10000.0; // How much force is applied
         let dissipate = 1.0;
         let density_factor = 0.05;
         let temp_factor = 0.10;
