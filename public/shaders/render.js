@@ -86,11 +86,16 @@ export function renderingShader(device, computeShaders, layout) {
         let t_end = t_bounds.y;
         var transmittance = 1.0;
         var final_color = textureLoad(readTexture, vec2i(i32(index.x), i32(index.y))).xyz;
+        var in_box = false;
         
         let offset = hash(f32(index.x) + f32(index.y) * f32(size.x));
         t += uStepSize * offset;
-
+        if (t < t_end){
+            final_color = vec3(0.0);
+            in_box = true;
+        }
         while (t < t_end) {
+            
             let pos = camera_origin + ray_dir * t;
             let li_dir = normalize(li_pos - pos);
             var li_density = 0.0;
@@ -132,6 +137,9 @@ export function renderingShader(device, computeShaders, layout) {
                 }
             }
             t += uStepSize;
+        }
+        if (in_box){
+            final_color += (transmittance * textureLoad(readTexture, vec2i(i32(index.x), i32(index.y))).xyz);
         }
         let color = vec4<f32>(final_color, 1.0 - transmittance);
         textureStore(texture, index, color);

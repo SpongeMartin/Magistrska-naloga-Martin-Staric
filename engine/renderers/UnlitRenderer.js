@@ -277,7 +277,8 @@ export class UnlitRenderer{
             colorAttachments: [
                 {
                     view: this.context.getCurrentTexture().createView(),
-                    clearValue: [0, 0, 0, 1],
+                    //clearValue: [0.572, 0.772, 0.921, 1],
+                    clearValue: [0.0, 0.0, 0.0, 1],
                     loadOp: 'clear',
                     storeOp: 'store',
                 },
