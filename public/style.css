@@ -22,3 +22,50 @@ body {
     top: 15px;
     right: 15px;
 }
+
+#gui{
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    padding: 10px;
+    color: white;
+    font-family: monospace;
+    background-color: rgb(0,0,0);
+    border-radius: 5%;
+}
+
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none; 
+    width: 100%;
+    cursor: pointer;
+    outline: none;
+    overflow: hidden;
+    border-radius: 16px;
+}
+  
+input[type="range"]::-webkit-slider-runnable-track {
+    height: 10px;
+    background: #ccc;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none; 
+    height: 10px;
+    width: 15px;
+    background-color: rgb(4, 71, 172);
+    border-radius: 0%;
+    border: 2px solid rgb(4, 71, 172);
+}
+
+.range {
+    display: flex;
+    align-items: center;
+    max-width: 500px;
+    height: 4rem;
+    width: 80%;
+    background: #030303;
+    padding: 0px 10px;
+}
+  

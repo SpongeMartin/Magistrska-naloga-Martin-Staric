@@ -1,6 +1,5 @@
 import { initialize, gridSize } from './init.js';
-import { handleInputs, writeTexture } from './utils.js';
-
+import { writeTexture, GUI } from './utils.js';
 
 
 async function main() {
@@ -14,21 +13,10 @@ async function main() {
     const {
         device,
         context,
-        timeBuffer,
-        explosionLocationBuffer,
-        renderModeBuffer,
-        viscosityBuffer,
-        tViscosityBuffer,
-        decayBuffer,
         computeShaders,
         gridBuffers,
-        modelBuffer,
-        viewBuffer,
-        projBuffer,
-        invMVPBuffer,
-        smokeTexture,
-        temperatureTexture,
-        inputBuffers,
+        textures,
+        buffers,
         smokeRender,
         renderer,
         updateScene,
@@ -36,6 +24,14 @@ async function main() {
         camera,
     } = await initialize(canvas);
 
+    let mouseClick = false;
+    let jacobi_iterations = 100;
+    let diffusion_iterations = 40;
+    let pause = false;
+    let frame_forward = false;
+
+    const gui = new GUI(device,buffers);
+    gui.init();
 
     function resizeCanvasToDisplaySize(canvas) {
         const devicePixelRatio = window.devicePixelRatio || 1;
@@ -48,26 +44,18 @@ async function main() {
         }
     }
 
-    handleInputs(device, inputBuffers, gridBuffers, gridSize, computeShaders);
-
-    let mouseClick = false;
-    let workgroup_size = gridSize / 4;
-    let jacobi_iterations = 100;
-    let pause = false;
-    let frame_forward = false;
-
     canvas.addEventListener("click", (event) => {
         const rect = canvas.getBoundingClientRect();
         const mouseX = (event.clientX - rect.left) / rect.width * gridSize;
         const mouseY = (event.clientY - rect.top) / rect.height * gridSize;
-        device.queue.writeBuffer(explosionLocationBuffer, 0, new Float32Array([mouseX, mouseY,Math.random() * (18 - 12) + 12]));
+        device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([mouseX, mouseY,Math.random() * (18 - 12) + 12]));
         mouseClick = true;
     });
 
     document.addEventListener("keydown", (event) => {
         if (event.key >= "1" && event.key <= "4") {
             const renderModeValue = parseInt(event.key);
-            device.queue.writeBuffer(renderModeBuffer,0,new Uint32Array([renderModeValue-1]));
+            device.queue.writeBuffer(buffers.renderMode.buffer,0,new Uint32Array([renderModeValue-1]));
         }
         if (event.code == 'Space'){
             pause = !pause;
@@ -78,65 +66,74 @@ async function main() {
         }
     });
 
-    function passage(device,pass,dt){
+    function passage(device, pass, workgroup_size){
         if (mouseClick){
         computeShaders.explosion.computePass(
             device,
             pass,
-            [gridBuffers.velocity.readBuffer,gridBuffers.density.readBuffer,gridBuffers.pressure.readBuffer,gridBuffers.temperature.readBuffer,explosionLocationBuffer,inputBuffers.gridSizeBuffer],
+            [gridBuffers.velocity.readBuffer,gridBuffers.density.readBuffer,
+            gridBuffers.pressure.readBuffer,gridBuffers.temperature.readBuffer,
+            buffers.explosionLocation.buffer,buffers.gridSize.buffer],
             workgroup_size, workgroup_size, workgroup_size);
         console.log("boom");
         mouseClick = false;
         }
 
-        for (let i = 0; i < 40; i++){
+        for (let i = 0; i < diffusion_iterations; i++){
         computeShaders.diffuse.computePass(
             device,
             pass,
-            [gridBuffers.density, gridBuffers.temperature, inputBuffers.gridSizeBuffer, dt, viscosityBuffer, tViscosityBuffer],
+            [gridBuffers.density, gridBuffers.temperature,
+            buffers.gridSize.buffer, buffers.time.buffer, 
+            buffers.viscosity.buffer, buffers.tViscosity.buffer],
             workgroup_size,workgroup_size,workgroup_size);
         }
 
         computeShaders.velocity.computePass(
         device,
         pass,
-        [gridBuffers.velocity, gridBuffers.temperature.readBuffer, inputBuffers.gridSizeBuffer, dt],
+        [gridBuffers.velocity, gridBuffers.temperature.readBuffer,
+        buffers.gridSize.buffer, buffers.time.buffer],
         workgroup_size, workgroup_size, workgroup_size);
 
         computeShaders.advect.computePass(
         device,
         pass,
-        [gridBuffers.velocity.readBuffer, gridBuffers.density, inputBuffers.gridSizeBuffer, dt, decayBuffer],
+        [gridBuffers.velocity.readBuffer, gridBuffers.density,
+        buffers.gridSize.buffer, buffers.time.buffer, 
+        buffers.decay.buffer],
         workgroup_size, workgroup_size, workgroup_size);
 
         computeShaders.advect.computePass(
         device,
         pass,
-        [gridBuffers.velocity.readBuffer, gridBuffers.temperature, inputBuffers.gridSizeBuffer, dt, decayBuffer],
+        [gridBuffers.velocity.readBuffer, gridBuffers.temperature, 
+        buffers.gridSize.buffer, buffers.time.buffer, 
+        buffers.decay.buffer],
         workgroup_size, workgroup_size, workgroup_size);
         
         computeShaders.divergence.computePass(
         device,
         pass,
-        [gridBuffers.divergence.readBuffer, gridBuffers.velocity.readBuffer, inputBuffers.gridSizeBuffer],
+        [gridBuffers.divergence.readBuffer, gridBuffers.velocity.readBuffer, buffers.gridSize.buffer],
         workgroup_size, workgroup_size, workgroup_size);
 
         for (let i = 0; i < jacobi_iterations; i++){
         computeShaders.pressure.computePass(
             device,
             pass,
-            [gridBuffers.divergence.readBuffer, gridBuffers.pressure, inputBuffers.gridSizeBuffer],
+            [gridBuffers.divergence.readBuffer, gridBuffers.pressure, buffers.gridSize.buffer],
             workgroup_size, workgroup_size, workgroup_size);
         }
         
         computeShaders.substract.computePass(
         device,
         pass,
-        [gridBuffers.velocity.readBuffer, gridBuffers.pressure.readBuffer, inputBuffers.gridSizeBuffer],
+        [gridBuffers.velocity.readBuffer, gridBuffers.pressure.readBuffer, buffers.gridSize.buffer],
         workgroup_size, workgroup_size, workgroup_size);
 
-        writeTexture(device, smokeTexture, gridBuffers.density.readBuffer, gridSize);
-        writeTexture(device, temperatureTexture, gridBuffers.temperature.readBuffer, gridSize);
+        writeTexture(device, textures.smokeTexture, gridBuffers.density.readBuffer, gridSize);
+        writeTexture(device, textures.temperatureTexture, gridBuffers.temperature.readBuffer, gridSize);
     }
 
     let prevTime = performance.now();
@@ -144,19 +141,13 @@ async function main() {
     function frame() {
         let currTime = performance.now();
         const deltaTime = (currTime - prevTime) / 1000;
-        prevTime = currTime
-        workgroup_size = gridSize / 4;
-
-        const timeArray = new Float32Array([deltaTime]);
+        prevTime = currTime;
+        const workgroup_size = gridSize / 4;
 
         resizeCanvasToDisplaySize(canvas);
 
-        device.queue.writeBuffer(timeBuffer,0,timeArray.buffer,0,timeArray.byteLength);
-
-        const commandEncoder = device.createCommandEncoder();
-
-        updateScene(currTime, deltaTime);
-        renderer.render(scene, camera);
+        const timeArray = new Float32Array([deltaTime]);
+        device.queue.writeBuffer(buffers.time.buffer,0,timeArray.buffer,0,timeArray.byteLength);
 
         const canvasTexture = context.getCurrentTexture();
         const readableTexture = device.createTexture({
@@ -164,6 +155,12 @@ async function main() {
             format: "rgba8unorm",
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.STORAGE_BINDING
         });
+
+        const commandEncoder = device.createCommandEncoder();
+
+        updateScene(currTime, deltaTime);
+        renderer.render(scene, camera);
+        
         commandEncoder.copyTextureToTexture(
             { texture: canvasTexture },
             { texture: readableTexture },
@@ -172,10 +169,10 @@ async function main() {
 
         const computePass = commandEncoder.beginComputePass();
 
-        if (!pause){
-            passage(device,computePass,timeBuffer);
-        } else if(frame_forward){
-            passage(device,computePass,timeBuffer);
+        if (!pause) {
+            passage(device,computePass,workgroup_size);
+        } else if(frame_forward) {
+            passage(device,computePass,workgroup_size);
             frame_forward = false;
         }
 
@@ -185,14 +182,6 @@ async function main() {
         
         requestAnimationFrame(frame);
     }
-
-    /* const gui = new GUI();
-    const controller = camera.getComponentOfType(FirstPersonController);
-    gui.add(controller, 'pointerSensitivity', 0.0001, 0.01);
-    gui.add(controller, 'maxSpeed', 0, 10);
-    gui.add(controller, 'decay', 0, 1);
-    gui.add(controller, 'acceleration', 1, 100); */
-    
 
     requestAnimationFrame(() => {frame()});
 }

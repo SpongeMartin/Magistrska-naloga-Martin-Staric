@@ -1,4 +1,4 @@
-import { GridBuffer } from "./utils.js";
+import { GridBuffer, createBuffer } from "./utils.js";
 
 import * as WebGPU from '/WebGPU.js';
 
@@ -36,112 +36,32 @@ export async function initialize(canvas) {
     const device = await adapter.requestDevice({requiredFeatures: ["float32-filterable"]});
     const context = canvas.getContext("webgpu");
     const format = "rgba8unorm";
-    const usage =
-        GPUTextureUsage.RENDER_ATTACHMENT |
+    const usage = GPUTextureUsage.RENDER_ATTACHMENT |
         GPUTextureUsage.STORAGE_BINDING |
         GPUTextureUsage.COPY_SRC;
     context.configure({ device, format, usage });
   
-    const gridSizeBuffer = device.createBuffer({
-        size: 4, // 32-bit integer (byte = 8 bits, 8 * 4 = 32-bit)
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    device.queue.writeBuffer(gridSizeBuffer, 0, new Uint32Array([gridSize]));
-    
-    const renderModeBuffer = device.createBuffer({
-        size: 4, // 32-bit integer (byte = 8 bits, 8 * 4 = 32-bit)
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    device.queue.writeBuffer(renderModeBuffer, 0, new Uint32Array([0]));
-    
-    const timeBuffer = device.createBuffer({
-        size: 4, // 32-bit integer
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    
-    const absorptionBuffer = device.createBuffer({
-        size: 4, // 32-bit float
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
+    const buffers = {}
 
-    const scatteringBuffer = device.createBuffer({
-        size: 4, // 32-bit float
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    const stepSizeBuffer = device.createBuffer({
-        size: 4, // 32-bit float
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    
-    const lightStepSizeBuffer = device.createBuffer({
-        size: 4, // 32-bit float
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    const phaseBuffer = device.createBuffer({
-        size: 4, // 32-bit float
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    
-    const viscosityBuffer = device.createBuffer({
-        size: 4, // 32-bit float
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    
-    const decayBuffer = device.createBuffer({
-        size: 4, // 32-bit float
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    
-    const tViscosityBuffer = device.createBuffer({
-        size: 4, // 32-bit float
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    const explosionLocationBuffer = device.createBuffer({
-        size: 12,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    })
-    
-    
-    device.queue.writeBuffer(stepSizeBuffer, 0, new Float32Array([0.05]));
-    device.queue.writeBuffer(absorptionBuffer, 0, new Float32Array([0.35]));
-    device.queue.writeBuffer(scatteringBuffer, 0, new Float32Array([36.0]));
-    device.queue.writeBuffer(phaseBuffer, 0, new Float32Array([0.3]));
-    device.queue.writeBuffer(viscosityBuffer, 0, new Float32Array([1.0]));
-    device.queue.writeBuffer(decayBuffer, 0, new Float32Array([0.999]));
-
-    device.queue.writeBuffer(tViscosityBuffer, 0, new Float32Array([1.0]));
-    
-
-    // Create GPU Buffers for Matrices
-    const modelBuffer = device.createBuffer({
-        size: 16 * 4, // 4x4 matrix (16 floats)
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    const viewBuffer = device.createBuffer({
-        size: 16 * 4,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    const projBuffer = device.createBuffer({
-        size: 16 * 4,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    
-    const invMVPBuffer = device.createBuffer({
-        size: 16 * 4,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
+    createBuffer(device, buffers, "gridSize", "Grid Size", 4, gridSize, 16, 128, 16,Int32Array);
+    createBuffer(device, buffers, "renderMode", "Render Mode", 4, 0, undefined, undefined, undefined, Int32Array);
+    createBuffer(device, buffers, "time", "Time", 4);
+    createBuffer(device, buffers, "absorption", "Absorption", 4, 0.35, 0.0, 10.0, 0.05);
+    createBuffer(device, buffers, "scattering", "Scattering", 4, 36.0, 0.0, 100.0, 0.1);
+    createBuffer(device, buffers, "stepSize", "Step Size", 4, 0.05, 0.02, 0.5, 0.01);
+    createBuffer(device, buffers, "lightStepSize", "Light Step Size", 4);
+    createBuffer(device, buffers, "phase", "Phase", 4, 0.3, -1.0, 1.0, 0.01);
+    createBuffer(device, buffers, "viscosity", "Viscosity", 4, 1.0, 0.0, 10.0, 0.1);
+    createBuffer(device, buffers, "decay", "Decay", 4, 0.999, 0.950, 1.0, 0.001);
+    createBuffer(device, buffers, "tViscosity", "Temperature Viscosity", 4, 1.0, 0.0, 10.0, 0.1);
+    createBuffer(device, buffers, "explosionLocation", "Explosion Location", 12);
   
     const velocity = new GridBuffer("velocity", device, gridSize, 3);
 
     const density = new GridBuffer("density", device, gridSize);
 
     const divergence = new GridBuffer("divergence", device, gridSize);
-
+    
     const pressure = new GridBuffer("pressure", device, gridSize);
 
     const temperature = new GridBuffer("temperature", device, gridSize);
@@ -159,6 +79,11 @@ export async function initialize(canvas) {
         dimension: "3d",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
     });
+
+    const textures = {
+        smokeTexture: smokeTexture,
+        temperatureTexture: temperatureTexture,
+    };
 
     const smokeSampler = device.createSampler({
         addressModeU: 'clamp-to-edge',
@@ -228,14 +153,6 @@ export async function initialize(canvas) {
 
     // Initializing shaders
     const computeShaders = {};
-    const inputBuffers = {
-        absorptionBuffer: absorptionBuffer,
-        scatteringBuffer: scatteringBuffer,
-        stepSizeBuffer: stepSizeBuffer,
-        lightStepSizeBuffer: lightStepSizeBuffer,
-        phaseBuffer: phaseBuffer,
-        gridSizeBuffer: gridSizeBuffer,
-    };
     const gridBuffers = {velocity: velocity, density: density, divergence: divergence, pressure: pressure, temperature: temperature};
     shaderInit(device,computeShaders);
 
@@ -244,28 +161,20 @@ export async function initialize(canvas) {
         computeShaders.render.renderPass(
             device,
             computePass,
-            [canvasTexture, readableTexture, smokeTexture, smokeSampler, temperatureTexture, temperatureSampler, stepSizeBuffer, lightStepSizeBuffer, absorptionBuffer, scatteringBuffer, phaseBuffer],
+            [canvasTexture, readableTexture, smokeTexture, smokeSampler,
+            temperatureTexture, temperatureSampler, buffers.stepSize.buffer, 
+            buffers.lightStepSize.buffer, buffers.absorption.buffer,
+            buffers.scattering.buffer, buffers.phase.buffer],
             canvasWidth / 8, canvasHeight / 8);
     }
 
     return {
         device,
         context,
-        timeBuffer,
-        explosionLocationBuffer,
-        renderModeBuffer,
-        decayBuffer,
-        viscosityBuffer,
-        tViscosityBuffer,
         computeShaders,
         gridBuffers,
-        modelBuffer,
-        viewBuffer,
-        projBuffer,
-        invMVPBuffer,
-        smokeTexture,
-        temperatureTexture,
-        inputBuffers,
+        textures,
+        buffers,
         smokeRender,
         renderer,
         updateScene,

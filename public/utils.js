@@ -151,58 +151,65 @@ export function borderControl(in_arr,out_arr,out_val, fun_name = "borderControl"
         }
     `};
 
-export function handleInputs(device, inputBuffers, gridBuffers, gridSize, computeShaders) {
-    const stepInput = document.getElementById('stepSize');
-    const gridInput = document.getElementById('grid');
-    const absorptionInput = document.getElementById('absorption');
-    const scatteringInput = document.getElementById('scattering');
-    const phaseInput = document.getElementById('phase');
-    const lightInput = document.getElementById('light-step');
+export class GUI {
+    constructor(device,buffers){
+        this.elements = {};
+        const gui = document.createElement('div');
+        gui.id = 'gui';
+        document.body.appendChild(gui);
+        this.gui = gui;
+        this.buffers = buffers;
+        this.device = device;
+    }
 
-    const stepDisplay = document.getElementById('stepVal');
-    const gridDisplay = document.getElementById('gridVal');
-    const absorptionDisplay = document.getElementById('absorptionVal');
-    const scatteringDisplay = document.getElementById('scatteringVal');
-    const phaseDisplay = document.getElementById('phaseVal');
-    const lightDisplay = document.getElementById('light-stepVal');
+    init(){
+        Object.entries(this.buffers).forEach(([id, buffer]) => {
+            if (buffer.input) {
+                this.createInput(buffer, id, buffer.name, buffer.initial_value, buffer.min, buffer.max, buffer.step);
+            }
+          });
+    }
 
-    let stepSize = parseFloat(stepInput.value);
-    gridSize = parseFloat(gridInput.value);
-    let absorption = parseFloat(absorptionInput.value);
-    let scattering = parseFloat(scatteringInput.value);
-    let phase = parseFloat(phaseInput.value);
-    let lightSize = parseFloat(lightInput.value);
+    createInput(buffer, id, label, defaultValue, min, max, step){
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.id = id;
+        input.class = "range";
+        input.min = min;
+        input.max = max;
+        input.value = parseFloat(defaultValue.toFixed(2));
+        input.step = step || 0.01;
+        input.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            buffer.update(value);
+            this.updateDisplay(id, value);
+        });
+        const labelElement = document.createElement('label');
+        labelElement.textContent = label;
+        labelElement.setAttribute('for', id);
+        const display = document.createElement('span');
+        display.id = id + 'Val';
+        display.textContent = defaultValue;
+        const container = document.createElement('div');
+        container.appendChild(labelElement);
+        container.appendChild(input);
+        container.appendChild(display);
+        this.gui.appendChild(container);
+        this.elements[id] = { input, display };
+    }
 
-    stepInput.addEventListener('input', (e) => {
-        stepSize = parseFloat(e.target.value);
-        stepDisplay.textContent = stepSize;
-        device.queue.writeBuffer(inputBuffers.stepSizeBuffer, 0, new Float32Array([stepSize]));
-    });
-    gridInput.addEventListener('input', (e) => {
-        gridSize = parseFloat(e.target.value);
-        gridDisplay.textContent = gridSize;
-        resetGrid(device, gridSize, gridBuffers, inputBuffers.gridSizeBuffer, computeShaders);
-    });
-    absorptionInput.addEventListener('input', (e) => {
-        absorption = parseFloat(e.target.value);
-        absorptionDisplay.textContent = absorption;
-        device.queue.writeBuffer(inputBuffers.absorptionBuffer, 0, new Float32Array([absorption]));
-    });
-    scatteringInput.addEventListener('input', (e) => {
-        scattering = parseFloat(e.target.value);
-        scatteringDisplay.textContent = scattering;
-        device.queue.writeBuffer(inputBuffers.scatteringBuffer, 0, new Float32Array([scattering]));
-    });
-    phaseInput.addEventListener('input', (e) => {
-        phase = parseFloat(e.target.value);
-        phaseDisplay.textContent = phase;
-        device.queue.writeBuffer(inputBuffers.phaseBuffer, 0, new Float32Array([phase]));
-    });
-    lightInput.addEventListener('input', (e) => {
-        lightSize = parseFloat(e.target.value);
-        lightDisplay.textContent = lightSize;
-        device.queue.writeBuffer(inputBuffers.lightStepSizeBuffer, 0, new Float32Array([lightSize]));
-    });
+    updateValue(id, value){
+        const buffer = this.buffers[id + 'Buffer'];
+        
+        if (buffer) {
+            this.device.queue.writeBuffer(buffer, 0, new Float32Array([value]));
+        }
+    }
+
+    updateDisplay(id, value){
+        const display = this.elements[id].display;
+        display.textContent = value;
+    }
 }
 
 export function resetGrid(device, gridSize, gridBuffers, gridSizeBuffer, computeShaders) {
@@ -213,7 +220,7 @@ export function resetGrid(device, gridSize, gridBuffers, gridSizeBuffer, compute
     shaderInit(device,computeShaders);
 }
 
-export async function readBufferToFloat32Array(device, buffer, size) {
+async function readBufferToFloat32Array(device, buffer, size) {
     // Create a buffer for reading the data
     const readBuffer = device.createBuffer({
         size: size,
@@ -241,4 +248,62 @@ export async function writeTexture(device, tex, data, gridSize){
         arr,
         { bytesPerRow: gridSize * 4, rowsPerImage: gridSize },
         { width: gridSize, height: gridSize, depthOrArrayLayers: gridSize });
+}
+
+class Buffer {
+    constructor(device, name, size, value, min, max, step, usage = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, type = Float32Array) {
+        this.device = device;
+        this._name = name;
+        this._buffer = device.createBuffer({
+            size: size,
+            usage: usage
+        });
+        this.type = type;
+        if (value) {
+            this.update(value);
+            this.initial_value = value;
+        }
+        if (max) {
+            this._max = max;
+            this._min = min;
+            this._step = step;
+            this._input = true;
+        } else this._input = false;
+    }
+    
+    get value(){
+        return this.initial_value;
+    }
+
+    get name(){
+        return this._name;
+    }
+
+    get min(){
+        return this._min;
+    }
+
+    get max(){
+        return this._max;
+    }
+
+    get step(){
+        return this._step;
+    }
+
+    get input(){
+        return this._input;
+    }
+
+    get buffer(){
+        return this._buffer;
+    }
+
+    update(value) {
+        this.device.queue.writeBuffer(this._buffer, 0, new this.type([value]));
+    }
+}
+
+export function createBuffer(device, buffers, id, name, size, value, min, max, step, type = Float32Array, usage = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST) {
+    buffers[id] = new Buffer(device, name, size, value, min, max, step, usage, type);
 }

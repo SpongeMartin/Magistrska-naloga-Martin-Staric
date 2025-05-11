@@ -8,20 +8,6 @@
 </head>
 <body>
   <canvas width="512" height="512" id="gpuCanvas"></canvas>
-  <div class="container">
-    <label for="stepSize">Step Size: <span id="stepVal">0.05</span></label>
-    <input type="range" id="stepSize" min="0.001" max="0.5" step="0.001" value="0.05" style="width:100%;">
-    <label for="absorption">Absorption <span id="absorptionVal">0.35</span></label>
-    <input type="range" id="absorption" min="0.01" max="5.0" step="0.01" value="0.35">
-    <label for="scattering">Scattering <span id="scatteringVal">12.0</span></label>
-    <input type="range" id="scattering" min="0.01" max="100.0" step="0.01" value="12.0">
-    <label for="light-step">Light Step Size <span id="light-stepVal">0.05</span></label>
-    <input type="range" id="light-step" min="0.01" max="0.1" step="0.01" value="0.05">
-    <label for="grid">Grid Size <span id="gridVal">32</span></label>
-    <input type="range" id="grid" min="16" max="32" step="16" value="32">
-    <label for="phase">Phase <span id="phaseVal">0.20</span></label>
-    <input type="range" id="phase" min="0.0" max="1.0" step="0.01" value="0.2">
-  </div>
   <script type="module" src="main.js"></script>
 </body>
 </html>
