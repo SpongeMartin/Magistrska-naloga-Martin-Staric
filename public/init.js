@@ -1,10 +1,9 @@
 import { GridBuffer, createBuffer } from "./utils.js";
 
-import { Node, Transform } from '/core.js';
-
 import { shaderInit } from "./shaders/shaderInit.js";
 
 import { sceneInit } from "./scene.js"
+
 
 export let gridSize = 32;
 
@@ -86,27 +85,24 @@ export async function initialize(canvas) {
         minFilter: 'linear',
     });
 
-    const explosion = new Node();
-    explosion.addComponent(new Transform());
 
-    const smokeTranslations = {};
     const computeShaders = {};
     const gridBuffers = {velocity: velocity, density: density, divergence: divergence, pressure: pressure, temperature: temperature};
     shaderInit(device,computeShaders);
 
-    
-    function smokeRender(computePass, canvasTexture,  readableTexture, canvasWidth, canvasHeight) {
+    const sceneProps = await sceneInit(device, canvas, context, format);
+
+    function smokeRender(computePass, canvasTexture, readableTexture, localModel, model, view, projection, camPos, canvasWidth, canvasHeight) {
         computeShaders.render.renderPass(
             device,
             computePass,
             [canvasTexture, readableTexture, smokeTexture, smokeSampler,
-            temperatureTexture, temperatureSampler, buffers.stepSize.buffer, 
+            temperatureTexture, temperatureSampler, buffers.stepSize.buffer,
             buffers.lightStepSize.buffer, buffers.absorption.buffer,
-            buffers.scattering.buffer, buffers.phase.buffer],
+            buffers.scattering.buffer, buffers.phase.buffer,
+            localModel, model, view, projection, camPos],
             canvasWidth / 8, canvasHeight / 8);
     }
-
-    let renderer, scene, camera, updateScene = sceneInit(device, canvas, context, format)
     
     return {
         device,
@@ -116,10 +112,9 @@ export async function initialize(canvas) {
         textures,
         buffers,
         smokeRender,
-        renderer,
-        updateScene,
-        scene,
-        camera,
+        renderer:sceneProps.renderer,
+        scene:sceneProps.scene,
+        camera:sceneProps.camera,
     };
 }
   

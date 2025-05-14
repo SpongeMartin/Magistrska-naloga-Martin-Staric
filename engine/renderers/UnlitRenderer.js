@@ -148,41 +148,41 @@ export class UnlitRenderer{
             const gpuObjects = { gpuTexture };
             this.gpuObjects.set(image, gpuObjects);
             return gpuObjects;
+    }
+    
+    prepareSampler(sampler) {
+        if (this.gpuObjects.has(sampler)) {
+            return this.gpuObjects.get(sampler);
         }
-    
-        prepareSampler(sampler) {
-            if (this.gpuObjects.has(sampler)) {
-                return this.gpuObjects.get(sampler);
-            }
-    
-            const gpuSampler = this.device.createSampler(sampler);
-    
-            const gpuObjects = { gpuSampler };
-            this.gpuObjects.set(sampler, gpuObjects);
-            return gpuObjects;
+
+        const gpuSampler = this.device.createSampler(sampler);
+
+        const gpuObjects = { gpuSampler };
+        this.gpuObjects.set(sampler, gpuObjects);
+        return gpuObjects;
+    }
+
+    prepareMesh(mesh, layout) {
+        if (this.gpuObjects.has(mesh)) {
+            return this.gpuObjects.get(mesh);
         }
-    
-        prepareMesh(mesh, layout) {
-            if (this.gpuObjects.has(mesh)) {
-                return this.gpuObjects.get(mesh);
-            }
-    
-            const vertexBufferArrayBuffer = createVertexBuffer(mesh.vertices, layout);
-            const vertexBuffer = WebGPU.createBuffer(this.device, {
-                data: vertexBufferArrayBuffer,
-                usage: GPUBufferUsage.VERTEX,
-            });
-    
-            const indexBufferArrayBuffer = new Uint32Array(mesh.indices).buffer;
-            const indexBuffer = WebGPU.createBuffer(this.device, {
-                data: indexBufferArrayBuffer,
-                usage: GPUBufferUsage.INDEX,
-            });
-    
-            const gpuObjects = { vertexBuffer, indexBuffer };
-            this.gpuObjects.set(mesh, gpuObjects);
-            return gpuObjects;
-        }
+
+        const vertexBufferArrayBuffer = createVertexBuffer(mesh.vertices, layout);
+        const vertexBuffer = WebGPU.createBuffer(this.device, {
+            data: vertexBufferArrayBuffer,
+            usage: GPUBufferUsage.VERTEX,
+        });
+
+        const indexBufferArrayBuffer = new Uint32Array(mesh.indices).buffer;
+        const indexBuffer = WebGPU.createBuffer(this.device, {
+            data: indexBufferArrayBuffer,
+            usage: GPUBufferUsage.INDEX,
+        });
+
+        const gpuObjects = { vertexBuffer, indexBuffer };
+        this.gpuObjects.set(mesh, gpuObjects);
+        return gpuObjects;
+    }
 
     prepareNode(node) {
         if (this.gpuObjects.has(node)) {

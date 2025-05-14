@@ -19,7 +19,7 @@ export function diffuseShader(device, computeShaders) {
         let x = global_id.x;
         let y = global_id.y;
         let z = global_id.z;
-        let gs = gridSize - 1;
+        let gs = gridSize;
         let gridSize2 = gridSize * gridSize;
         let idx = x + y * gridSize + z * gridSize2;
 

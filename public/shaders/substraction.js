@@ -14,20 +14,21 @@ export function gradientSubstractionShader(device, computeShaders) {
         let x = global_id.x;
         let y = global_id.y;
         let z = global_id.z;
-        let gridSize2 = gridSize * gridSize;
-        let idx = x + y * gridSize + z * gridSize2;
-        let gs = gridSize - 1;
+        let gs = gridSize;
+        let gs2 = gs * gs;
+        let idx = x + y * gs + z * gs2;
+        
 
         borderControl(1, x, y, z, idx);
 
-        let pL = pressure_in[clamp(x - 1, 0, gs) + y * gridSize + z * gridSize2];
-        let pR = pressure_in[clamp(x + 1, 0, gs) + y * gridSize + z * gridSize2];
-        let pB = pressure_in[x + clamp(y - 1, 0, gs) * gridSize + z * gridSize2];
-        let pT = pressure_in[x + clamp(y + 1, 0, gs) * gridSize + z * gridSize2];
-        let pF = pressure_in[x + y * gridSize + clamp(z + 1, 0, gs) * gridSize2];
-        let pBa = pressure_in[x + y * gridSize + clamp(z - 1, 0, gs) * gridSize2];
+        let pL = pressure_in[clamp(x - 1, 0, gs) + y * gs + z * gs2];
+        let pR = pressure_in[clamp(x + 1, 0, gs) + y * gs + z * gs2];
+        let pB = pressure_in[x + clamp(y - 1, 0, gs) * gs + z * gs2];
+        let pT = pressure_in[x + clamp(y + 1, 0, gs) * gs + z * gs2];
+        let pF = pressure_in[x + y * gs + clamp(z + 1, 0, gs) * gs2];
+        let pBa = pressure_in[x + y * gs + clamp(z - 1, 0, gs) * gs2];
         
-        velocity[idx] -= vec3<f32>((pR - pL),(pT - pB),(pF - pBa)) * 0.5;
+        velocity[idx] -= vec3<f32>((pR - pL),(pT - pB),(pF - pBa)) * .5;
 
         velocityBorder(1, x, y, z, idx);
     }`);

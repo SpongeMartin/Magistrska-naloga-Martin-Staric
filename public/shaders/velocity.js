@@ -1,4 +1,4 @@
-import { ComputeShader,borderControl } from "../utils.js";
+import { ComputeShader, borderControl } from "../utils.js";
 
 export function velocityAdvectionShader(device, computeShaders) {
     computeShaders.velocity = new ComputeShader("velocity", device, /*wgsl*/`
@@ -12,7 +12,7 @@ export function velocityAdvectionShader(device, computeShaders) {
 
     fn self_advection(idx:u32, x: f32, y: f32, z: f32) -> vec3<f32> {
         let vel: vec3<f32> = velocity_in[idx];
-        let prevPos: vec3<f32> = vec3<f32>(x, y, z) - vel * dt;
+        var prevPos: vec3<f32> = vec3<f32>(x, y, z) - vel * dt;
         let prevTemperature = sample_temperature_at(prevPos);
 
         let temperatureGradient = vec3<f32>(0.0, -1.0, 0.0); // Fix renderer so it works in z direction
@@ -26,7 +26,7 @@ export function velocityAdvectionShader(device, computeShaders) {
         var x = pos.x;
         var y = pos.y;
         var z = pos.z;
-        let gs = gridSize - 1;
+        let gs = gridSize;
         let gridSize2 = gridSize * gridSize;
     
         let x1 = clamp(u32(floor(x)), 0, gs);
@@ -36,14 +36,14 @@ export function velocityAdvectionShader(device, computeShaders) {
         let y2 = clamp(u32(y1 + 1), 0, gs);
         let z2 = clamp(u32(z1 + 1), 0, gs);
     
-        let fbl = temperature_in[x1 + y1 * gridSize + z2 * gridSize2];
-        let fbr = temperature_in[x2 + y1 * gridSize + z2 * gridSize2];
-        let ftl = temperature_in[x1 + y2 * gridSize + z2 * gridSize2];
-        let ftr = temperature_in[x2 + y2 * gridSize + z2 * gridSize2];
-        let bbl = temperature_in[x1 + y1 * gridSize + z1 * gridSize2];
-        let bbr = temperature_in[x2 + y1 * gridSize + z1 * gridSize2];
-        let btl = temperature_in[x1 + y2 * gridSize + z1 * gridSize2];
-        let btr = temperature_in[x2 + y2 * gridSize + z1 * gridSize2];
+        let fbl = temperature_in[x1 + y1 * gs + z2 * gridSize2];
+        let fbr = temperature_in[x2 + y1 * gs + z2 * gridSize2];
+        let ftl = temperature_in[x1 + y2 * gs + z2 * gridSize2];
+        let ftr = temperature_in[x2 + y2 * gs + z2 * gridSize2];
+        let bbl = temperature_in[x1 + y1 * gs + z1 * gridSize2];
+        let bbr = temperature_in[x2 + y1 * gs + z1 * gridSize2];
+        let btl = temperature_in[x1 + y2 * gs + z1 * gridSize2];
+        let btr = temperature_in[x2 + y2 * gs + z1 * gridSize2];
     
         let xMod = fract(x);
         let yMod = fract(y);
@@ -58,7 +58,7 @@ export function velocityAdvectionShader(device, computeShaders) {
         var x = pos.x;
         var y = pos.y;
         var z = pos.z;
-        let gs = gridSize - 1;
+        let gs = gridSize;
         let gridSize2 = gridSize * gridSize;
     
         let x1 = clamp(u32(floor(x)),0,gs);
@@ -68,14 +68,14 @@ export function velocityAdvectionShader(device, computeShaders) {
         let y2 = clamp(u32(y1 + 1),0,gs);
         let z2 = clamp(u32(z1 + 1),0,gs);
     
-        let fbl = velocity_in[x1 + y1 * gridSize + z2 * gridSize2][component];
-        let fbr = velocity_in[x2 + y1 * gridSize + z2 * gridSize2][component];
-        let ftl = velocity_in[x1 + y2 * gridSize + z2 * gridSize2][component];
-        let ftr = velocity_in[x2 + y2 * gridSize + z2 * gridSize2][component];
-        let bbl = velocity_in[x1 + y1 * gridSize + z1 * gridSize2][component];
-        let bbr = velocity_in[x2 + y1 * gridSize + z1 * gridSize2][component];
-        let btl = velocity_in[x1 + y2 * gridSize + z1 * gridSize2][component];
-        let btr = velocity_in[x2 + y2 * gridSize + z1 * gridSize2][component];
+        let fbl = velocity_in[x1 + y1 * gs + z2 * gridSize2][component];
+        let fbr = velocity_in[x2 + y1 * gs + z2 * gridSize2][component];
+        let ftl = velocity_in[x1 + y2 * gs + z2 * gridSize2][component];
+        let ftr = velocity_in[x2 + y2 * gs + z2 * gridSize2][component];
+        let bbl = velocity_in[x1 + y1 * gs + z1 * gridSize2][component];
+        let bbr = velocity_in[x2 + y1 * gs + z1 * gridSize2][component];
+        let btl = velocity_in[x1 + y2 * gs + z1 * gridSize2][component];
+        let btr = velocity_in[x2 + y2 * gs + z1 * gridSize2][component];
     
         let xMod = fract(x); // Only keeps the fraction (decimalke)
         let yMod = fract(y);

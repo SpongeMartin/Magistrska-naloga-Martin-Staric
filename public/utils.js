@@ -77,7 +77,7 @@ export class GridBuffer {
      * @param {number} size - The size of the buffer in bytes.
      * @param {number} components - The number of components in each cell. Default = 1.
      */
-    constructor(label,device,size, components = 1) {
+    constructor(label, device, size, components = 1) {
         this.components = components;
         this.readBuffer = device.createBuffer({
             size: size * size * size * components * Float32Array.BYTES_PER_ELEMENT,
@@ -89,7 +89,22 @@ export class GridBuffer {
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
         });
 
+        this.copyBuffer = device.createBuffer({
+            size: size * size * size * components * Float32Array.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+        });
+
         this.label = label;
+    }
+
+    async read(device,commandEncoder) {
+        await commandEncoder.copyBufferToBuffer(this.readBuffer, 0, this.copyBuffer, 0, 16 * 16 * 16 * 3);
+        device.queue.submit([commandEncoder.finish()]);
+        await this.copyBuffer.mapAsync(GPUMapMode.READ);
+        const arrayBuffer = this.copyBuffer.getMappedRange();
+        const dataRead = new Float32Array(arrayBuffer);
+        console.log([...dataRead]);
+        this.copyBuffer.unmap();
     }
 
     swap() {
@@ -118,10 +133,10 @@ export function borderControl(in_arr,out_arr,out_val, fun_name = "borderControl"
     return /*wgsl*/`
         fn ${fun_name}(t: u32, x: u32, y: u32, z:u32, idx: u32){
             let atLeft = (x == 0);
-            let atRight = (x == gridSize - 1);
-            let atTop = (y == gridSize - 1);
+            let atRight = (x == gridSize);
+            let atTop = (y == gridSize);
             let atBottom = (y == 0);
-            let atFront = (z == gridSize-1);
+            let atFront = (z == gridSize);
             let atBack = (z == 0);
             let atBorder = atLeft || atBottom || atRight || atTop || atBack || atFront;
             if(t == 0){

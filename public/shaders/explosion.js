@@ -19,18 +19,18 @@ export function explosionShader(device, computeShaders) {
         let cellPos = vec3<f32>(f32(x), f32(y), f32(z));
         let toCell = cellPos - explosionPos;
         let dist = length(toCell);
-        let rad = 10.0; // Effected area
+        let rad = 6.0; // Effected area
         let strength = 10000.0; // How much force is applied
         let dissipate = 1.0;
         let density_factor = 0.05;
         let temp_factor = 0.10;
 
         let atLeft = (x == 0);
-        let atRight = (x == gridSize - 1);
-        let atTop = (y == gridSize - 1);
+        let atRight = (x == gridSize);
+        let atTop = (y == gridSize);
         let atBottom = (y == 0);
         let atFront = (z == 0);
-        let atBack = (z == gridSize - 1);
+        let atBack = (z == gridSize);
         let edgeConditions = atLeft || atRight || atTop || atBottom || atFront || atBack;
 
         if (dist < rad && !edgeConditions) {

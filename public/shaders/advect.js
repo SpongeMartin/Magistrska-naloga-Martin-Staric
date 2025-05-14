@@ -16,8 +16,8 @@ export function advectShader(device, computeShaders) {
         var x = pos.x;
         var y = pos.y;
         var z = pos.z;
-        let gs = gridSize - 1;
-        let gridSize2 = gridSize * gridSize;
+        let gs = gridSize;
+        let gs2 = gs * gs;
     
         let x1 = clamp(u32(floor(x)),0,gs);
         let y1 = clamp(u32(floor(y)),0,gs);
@@ -26,14 +26,14 @@ export function advectShader(device, computeShaders) {
         let y2 = clamp(u32(y1 + 1),0,gs);
         let z2 = clamp(u32(z1 + 1),0,gs);
     
-        let fbl = density_in[x1 + y1 * gridSize + z1 * gridSize2];
-        let fbr = density_in[x2 + y1 * gridSize + z1 * gridSize2];
-        let ftl = density_in[x1 + y2 * gridSize + z1 * gridSize2];
-        let ftr = density_in[x2 + y2 * gridSize + z1 * gridSize2];
-        let bbl = density_in[x1 + y1 * gridSize + z2 * gridSize2];
-        let bbr = density_in[x2 + y1 * gridSize + z2 * gridSize2];
-        let btl = density_in[x1 + y2 * gridSize + z2 * gridSize2];
-        let btr = density_in[x2 + y2 * gridSize + z2 * gridSize2];
+        let fbl = density_in[x1 + y1 * gs + z1 * gs2];
+        let fbr = density_in[x2 + y1 * gs + z1 * gs2];
+        let ftl = density_in[x1 + y2 * gs + z1 * gs2];
+        let ftr = density_in[x2 + y2 * gs + z1 * gs2];
+        let bbl = density_in[x1 + y1 * gs + z2 * gs2];
+        let bbr = density_in[x2 + y1 * gs + z2 * gs2];
+        let btl = density_in[x1 + y2 * gs + z2 * gs2];
+        let btr = density_in[x2 + y2 * gs + z2 * gs2];
     
         let xMod = fract(x); // Only keeps the fraction (decimalke)
         let yMod = fract(y);

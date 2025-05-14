@@ -17,18 +17,21 @@ import { loadResources } from '/loaders/resources.js';
 
 import { UnlitRenderer } from '/renderers/UnlitRenderer.js';
 
-const asyncHandler = async (renderer) => {
+export function updateScene(scene, t, dt) {
+    scene.traverse(node => {
+        for (const component of node.components) {
+            component.update?.(t, dt);
+        }
+    });
+}
+
+export async function sceneInit(device, canvas, context, format){
+    const renderer = new UnlitRenderer(device, canvas, context, format);
     const resources = await loadResources({
         'mesh': new URL('/floor/floor.json', import.meta.url),
         'image': new URL('/floor/grass.png', import.meta.url),
     });
     await renderer.initialize();
-    return resources
-}
-
-export function sceneInit(device, canvas, context, format){
-    const renderer = new UnlitRenderer(device, canvas, context, format);
-    const resources = asyncHandler(renderer);
     
     const scene = new Node();
     
@@ -63,14 +66,10 @@ export function sceneInit(device, canvas, context, format){
         ],
     }));
     scene.addChild(floor);
-    
-    function updateScene(t, dt) {
-        scene.traverse(node => {
-            for (const component of node.components) {
-                component.update?.(t, dt);
-            }
-        });
-    }
 
-    return renderer, scene, camera, updateScene;
+    const explosion = new Node();
+    explosion.addComponent(new Transform());
+    scene.addChild(explosion);
+    
+    return { renderer, scene, camera };
 }

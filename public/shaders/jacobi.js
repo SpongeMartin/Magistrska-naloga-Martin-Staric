@@ -7,22 +7,21 @@ export function pressureShader(device, computeShaders) {
     @group(0) @binding(2) var<storage, read_write> pressure_out: array<f32>;
     @group(0) @binding(3) var<uniform> gridSize : u32;
 
-
     @compute @workgroup_size(4,4,4)
     fn main(@builtin(global_invocation_id) global_id : vec3<u32>){
         let x = global_id.x;
         let y = global_id.y;
         let z = global_id.z;
-        let gs = gridSize - 1;
-        let gridSize2 = gridSize * gridSize;
-        let idx = x + y * gridSize + z * gridSize2;
+        let gs = gridSize;
+        let gs2 = gs * gs;
+        let idx = x + y * gs + z * gs2;
 
-        let xL = pressure_in[clamp(x - 1, 0, gs) + y * gridSize + z * gridSize2];
-        let xR = pressure_in[clamp(x + 1, 0, gs) + y * gridSize + z * gridSize2];
-        let xB = pressure_in[x + clamp(y - 1, 0, gs) * gridSize + z * gridSize2];
-        let xT = pressure_in[x + clamp(y + 1, 0, gs) * gridSize + z * gridSize2];
-        let xF = pressure_in[x + y * gridSize + clamp(z + 1, 0, gs) * gridSize2];
-        let xBa = pressure_in[x + y * gridSize + clamp(z - 1, 0, gs) * gridSize2];
+        let xL = pressure_in[clamp(x - 1, 0, gs) + y * gs + z * gs2];
+        let xR = pressure_in[clamp(x + 1, 0, gs) + y * gs + z * gs2];
+        let xB = pressure_in[x + clamp(y - 1, 0, gs) * gs + z * gs2];
+        let xT = pressure_in[x + clamp(y + 1, 0, gs) * gs + z * gs2];
+        let xF = pressure_in[x + y * gs + clamp(z + 1, 0, gs) * gs2];
+        let xBa = pressure_in[x + y * gs + clamp(z - 1, 0, gs) * gs2];
         
         let div = divergence_in[idx];
         

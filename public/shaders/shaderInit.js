@@ -95,6 +95,41 @@ export function shaderInit(device, computeShaders) {
                     type: "uniform",
                 },
             },
+            {
+                binding: 11, // Local Model Matrix
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
+            {
+                binding: 12, // Model Matrix
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
+            {
+                binding: 13, // View Matrix
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
+            {
+                binding: 14, // Projection Matrix
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
+            {
+                binding: 15, // Camera Position
+                visibility: GPUShaderStage.COMPUTE,
+                buffer: {
+                    type: "uniform",
+                },
+            },
         ]
     });
 
