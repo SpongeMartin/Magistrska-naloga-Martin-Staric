@@ -97,6 +97,6 @@ export function velocityAdvectionShader(device, computeShaders) {
 
         velocity_out[idx] = advectedVelocity * 0.999; // Velocity decays!
 
-        borderControl(1, x, y, z, idx);
+        //borderControl(1, x, y, z, idx);
     }`);
 }

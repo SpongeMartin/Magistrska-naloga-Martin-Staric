@@ -15,8 +15,6 @@ export function divergenceShader(device, computeShaders) {
         let gs2 = gs * gs;
         let idx = x + y * gs + z * gs2;
         
-    
-
         let xL = velocity_in[clamp(x - 1, 0, gs) + y * gs + z * gs2];
         let xR = velocity_in[clamp(x + 1, 0, gs) + y * gs + z * gs2];
         let xB = velocity_in[x + clamp(y - 1, 0, gs) * gs  + z * gs2];

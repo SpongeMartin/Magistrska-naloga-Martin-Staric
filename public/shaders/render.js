@@ -1,25 +1,28 @@
 import { ComputeShader } from "../utils.js";
 
-export function renderingShader(device, computeShaders, layout) {
+export function renderingShader(device, computeShaders) {
     computeShaders.render = new ComputeShader("render", device, /*wgsl*/`
+
+    struct ModelUniforms {
+        modelMatrix: mat4x4f,
+        inverseViewMatrix: mat4x4f,
+        inverseProjectionMatrix: mat4x4f,
+    }
+
     @group(0) @binding(0) var texture: texture_storage_2d<rgba8unorm, write>;
     @group(0) @binding(1) var readTexture: texture_storage_2d<rgba8unorm, read>;
     @group(0) @binding(2) var smokeTexture: texture_3d<f32>;
     @group(0) @binding(3) var smokeSampler: sampler;
     @group(0) @binding(4) var temperatureTexture: texture_3d<f32>;
     @group(0) @binding(5) var temperatureSampler: sampler;
-    @group(0) @binding(6) var<uniform> uStepSize: f32; // Replace with marching through each block?
-    @group(0) @binding(7) var<uniform> uLightStepSize: f32;
-    @group(0) @binding(8) var<uniform> uAbsorption: f32; // How much density gets absorbed when sampled
-    @group(0) @binding(9) var<uniform> uScattering: f32; // How much light is scattered away from our view
-    @group(0) @binding(10) var<uniform> uPhase: f32;
-    @group(0) @binding(11) var<uniform> localModelMatrix: mat4x4<f32>;
-    @group(0) @binding(12) var<uniform> modelMatrix: mat4x4<f32>;
-    @group(0) @binding(13) var<uniform> inverseViewMatrix: mat4x4<f32>;
-    @group(0) @binding(14) var<uniform> inverseProjectionMatrix: mat4x4<f32>;
-    @group(0) @binding(15) var<uniform> cameraPosition: vec3<f32>;
+    @group(1) @binding(0) var<uniform> uStepSize: f32;
+    @group(1) @binding(1) var<uniform> uLightStepSize: f32;
+    @group(1) @binding(2) var<uniform> uAbsorption: f32; // How much density gets absorbed when sampled
+    @group(1) @binding(3) var<uniform> uScattering: f32; // How much light is scattered away from our view
+    @group(1) @binding(4) var<uniform> uPhase: f32;
+    @group(1) @binding(5) var<uniform> cameraPosition: vec3<f32>;
+    @group(2) @binding(0) var<uniform> uMatrices: ModelUniforms;
 
-    //@group(0) @binding(2) var<uniform> renderMode : u32;
 
     const PI: f32 = radians(180);
 
@@ -80,7 +83,7 @@ export function renderingShader(device, computeShaders, layout) {
         var maxCorner = vec3<f32>(-1000.0);
     
         for (var i = 0u; i < 8u; i = i + 1u) {
-            let worldPos = (localModelMatrix * vec4<f32>(corners[i], 1.0)).xyz;
+            let worldPos = (uMatrices.modelMatrix * vec4<f32>(corners[i], 1.0)).xyz;
             minCorner = min(minCorner, worldPos);
             maxCorner = max(maxCorner, worldPos);
         }
@@ -102,11 +105,13 @@ export function renderingShader(device, computeShaders, layout) {
         let cube_min = cube_bounds[0];
         let cube_max = cube_bounds[1];
 
-        // Ray casting from camera
-        let ndc = (vec2<f32>(index) / vec2<f32>(size)) * 2.0 - vec2<f32>(1.0);
-        let clipPos = vec4<f32>(ndc, -1.0, 1.0);
-        var viewPos = inverseProjectionMatrix * clipPos;
-        let worldPos = inverseViewMatrix * vec4<f32>(viewPos.xy, -1.0, 1.0);
+        let ndcx = 2.0 * ((f32(index.x) + 0.5) / f32(size.x) - 0.5) * PI/4.0 * (f32(size.x) / f32(size.y));
+        let ndcy = 1.0 - 2.0 * ((f32(index.y) + 0.5) / f32(size.y)) * PI/4.0;
+        let clipPos = vec4<f32>(ndcx, ndcy, -1.0, 1.0);
+        let viewPos = uMatrices.inverseProjectionMatrix * clipPos;
+        var worldPos = uMatrices.inverseViewMatrix * vec4<f32>(clipPos.xyz, 1.0);
+        worldPos = worldPos / worldPos.w;
+
         let ray_dir = normalize(worldPos.xyz - cameraPosition);
 
         // Intersect the ray with the cube
@@ -121,9 +126,9 @@ export function renderingShader(device, computeShaders, layout) {
         let li_color = vec3(1.0);
         let li_pos = vec3(3.0,-3.0,-3.0);
         var transmittance = 1.0;
-        var final_color = textureLoad(readTexture, vec2i(i32(index.x), i32(index.y))).xyz + vec3(0.1);
+        var final_color = textureLoad(readTexture, vec2i(i32(index.x), i32(index.y))).xyz;
         let offset = hash(f32(index.x) + f32(index.y) * f32(size.x)); // Random offset for jittering
-        t += uStepSize * offset;
+        t += uStepSize * offset * 0.01;
         if (t < t_end){
             final_color = vec3(0.0);
             in_box = true;
@@ -140,7 +145,7 @@ export function renderingShader(device, computeShaders, layout) {
             var li_density = 0.0;
             let li_end = intersectCube(pos, li_dir, cube_min, cube_max);
             if (li_end.y > 0.0 && density > 0.0) {
-                let numSteps = 20;
+                let numSteps = 50;
                 let cube_exit = pos + li_dir * li_end.y;
                 let liStepSize = distance(pos, cube_exit) / f32(numSteps);
     
@@ -153,6 +158,7 @@ export function renderingShader(device, computeShaders, layout) {
                 }
 
                 let cos_theta = dot(ray_dir, li_dir);
+                let ph = uPhase;
                 let li_transmittance = exp(-li_density * liStepSize * extinction);
                 final_color += scatter *                                // light color
                             li_transmittance *                          // light ray transmission value
@@ -163,9 +169,9 @@ export function renderingShader(device, computeShaders, layout) {
                             temperature_to_color(temperature) *         // temperature color
                             density;                                    // density
             }
-    
+
             if (transmittance < 0.01) { // Roulette
-                if (hash((transmittance * 10.0) + f32(index.x) + f32(index.y) * f32(size.x)) > 0.25){
+                if (hash((transmittance * 10.0) + f32(index.x) + f32(index.y) * f32(size.x)) > 0.5){
                     break;
                 }
             }
@@ -176,5 +182,5 @@ export function renderingShader(device, computeShaders, layout) {
         }
         let color = vec4<f32>(final_color, 1.0 - transmittance);
         textureStore(texture, index, color);
-    }`, device.createPipelineLayout({ bindGroupLayouts: [layout] }));
+    }`);
 }

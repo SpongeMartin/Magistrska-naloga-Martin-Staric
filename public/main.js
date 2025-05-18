@@ -21,6 +21,7 @@ async function main() {
         textures,
         buffers,
         smokeRender,
+        debugRender,
         renderer,
         scene,
         camera,
@@ -29,6 +30,7 @@ async function main() {
     let mouseClick = false;
     let jacobi_iterations = 100;
     let diffusion_iterations = 40;
+    let debug = false;
     let pause = false;
     let frame_forward = false;
 
@@ -47,15 +49,13 @@ async function main() {
     }
 
     canvas.addEventListener("click", (event) => {
-        const rect = canvas.getBoundingClientRect();
+        /* const rect = canvas.getBoundingClientRect();
         const mouseX = (event.clientX - rect.left) / rect.width * gridSize;
         const mouseY = (event.clientY - rect.top) / rect.height * gridSize;
-        console.log(mouseX, mouseY);
-        device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([mouseX, mouseY,Math.random() * (18 - 12) + 12]));
-        //device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([Math.random() * (18 - 15) + 15, Math.random() * (18 - 15) + 15, Math.random() * (12 - 8) + 8]));
-        //device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([Math.random() * (18 - 15) + 15, Math.random() * (18 - 15) + 15, 6.1]));
-        //device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([6.1,6.1, 6.1]));
-        //device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([Math.random() * (8 - 6) + 6, Math.random() * (8 - 6) + 6, 14.1]));
+        device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([mouseX, mouseY,Math.random() * (18 - 12) + 12])); */
+        let low = gridSize / 2 - 4;
+        let high = gridSize / 2 + 4;
+        device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([Math.random() * (high - low) + low, Math.random() * (high - low) + low, Math.random() * (high - low) + low]));
         mouseClick = true;
     });
 
@@ -86,14 +86,14 @@ async function main() {
         mouseClick = false;
         }
 
-        for (let i = 0; i < diffusion_iterations; i++){
-        computeShaders.diffuse.computePass(
-            device,
-            pass,
-            [gridBuffers.density, gridBuffers.temperature,
-            buffers.gridSize.buffer, buffers.time.buffer, 
-            buffers.viscosity.buffer, buffers.tViscosity.buffer],
-            workgroup_size,workgroup_size,workgroup_size);
+        for (let i = 0; i < 0; i++){
+            computeShaders.diffuse.computePass(
+                device,
+                pass,
+                [gridBuffers.density, gridBuffers.temperature,
+                buffers.gridSize.buffer, buffers.time.buffer, 
+                buffers.viscosity.buffer, buffers.tViscosity.buffer],
+                workgroup_size,workgroup_size,workgroup_size);
         }
 
         computeShaders.velocity.computePass(
@@ -141,6 +141,11 @@ async function main() {
 
         writeTexture(device, textures.smokeTexture, gridBuffers.density.readBuffer, gridSize);
         writeTexture(device, textures.temperatureTexture, gridBuffers.temperature.readBuffer, gridSize);
+        if (debug){
+            writeTexture(device, textures.pressureTexture, gridBuffers.pressure.readBuffer, gridSize);
+            writeTexture(device, textures.divergenceTexture, gridBuffers.divergence.readBuffer, gridSize);
+            writeTexture(device, textures.velocityTexture, gridBuffers.velocity.readBuffer, gridSize, 3);
+        }
     }
 
     let prevTime = performance.now();
@@ -174,7 +179,7 @@ async function main() {
             [canvas.width, canvas.height, 1]
         );
 
-        const explosion = new Transform({translation: [0.0, 1.0, -2.0], scale: [2.0, 2.0, 2.0]});
+        const explosion = new Transform({translation: [0.0, 2.0, -6.0], scale: [1.0, 1.0, 1.0]});
 
         const transform = camera.getComponentOfType(Transform);
 
@@ -184,31 +189,16 @@ async function main() {
         const inverseViewMatrix = mat4.invert(mat4.create(), viewMatrix);
         const inverseProjectionMatrix = mat4.invert(mat4.create(), projectionMatrix);
 
-        const localModel = device.createBuffer({
-            size: 64, // 16 floats * 4 bytes
+        const uniformMatrices = device.createBuffer({
+            size: 192,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
             mappedAtCreation: false,
         });
-        device.queue.writeBuffer(localModel, 0, explosion.matrix.buffer);
-        const model = device.createBuffer({
-            size: 64, // 16 floats * 4 bytes
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: false,
-        });
-        device.queue.writeBuffer(model, 0, transform.matrix.buffer);
-        const view = device.createBuffer({
-            size: 64, // 16 floats * 4 bytes
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: false,
-        });
-        device.queue.writeBuffer(view, 0, inverseViewMatrix.buffer);
-        const projection = device.createBuffer({
-            size: 64, // 16 floats * 4 bytes
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-            mappedAtCreation: false,
-        });
-        device.queue.writeBuffer(projection, 0, inverseProjectionMatrix.buffer);
-        device.queue.writeBuffer(view, 0, inverseViewMatrix.buffer);
+
+        device.queue.writeBuffer(uniformMatrices, 0, explosion.matrix.buffer);
+        device.queue.writeBuffer(uniformMatrices, 64, inverseViewMatrix.buffer);
+        device.queue.writeBuffer(uniformMatrices, 128, inverseProjectionMatrix.buffer);
+
         const cameraPos = device.createBuffer({
             size: 16, // 16 floats * 4 bytes
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -225,16 +215,15 @@ async function main() {
             passage(device,computePass,workgroup_size);
         } else if(frame_forward) {
             passage(device,computePass,workgroup_size);
-        }
-
-        smokeRender(computePass, canvasTexture, readableTexture, localModel, model, view, projection, cameraPos, canvas.width, canvas.height);
-        computePass.end();
-
-        if (frame_forward) {
-            gridBuffers.velocity.read(device, commandEncoder);
             frame_forward = false;
         }
-        else device.queue.submit([commandEncoder.finish()]);
+
+        
+        if (debug) debugRender(computePass, canvasTexture, readableTexture, uniformMatrices, cameraPos, canvas.width, canvas.height);
+        else smokeRender(computePass, canvasTexture, readableTexture, uniformMatrices, cameraPos, canvas.width, canvas.height);
+        computePass.end();
+
+        device.queue.submit([commandEncoder.finish()]);
         
         requestAnimationFrame(frame);
     }

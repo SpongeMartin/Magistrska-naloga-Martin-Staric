@@ -32,7 +32,7 @@ export async function initialize(canvas) {
     createBuffer(device, buffers, "time", "Time", 4);
     createBuffer(device, buffers, "absorption", "Absorption", 4, 0.35, 0.0, 10.0, 0.05);
     createBuffer(device, buffers, "scattering", "Scattering", 4, 36.0, 0.0, 100.0, 0.1);
-    createBuffer(device, buffers, "stepSize", "Step Size", 4, 0.05, 0.02, 0.5, 0.01);
+    createBuffer(device, buffers, "stepSize", "Step Size", 4, 0.15, 0.02, 0.5, 0.01);
     createBuffer(device, buffers, "lightStepSize", "Light Step Size", 4);
     createBuffer(device, buffers, "phase", "Phase", 4, 0.3, -1.0, 1.0, 0.01);
     createBuffer(device, buffers, "viscosity", "Viscosity", 4, 1.0, 0.0, 10.0, 0.1);
@@ -40,7 +40,7 @@ export async function initialize(canvas) {
     createBuffer(device, buffers, "tViscosity", "Temperature Viscosity", 4, 1.0, 0.0, 10.0, 0.1);
     createBuffer(device, buffers, "explosionLocation", "Explosion Location", 12);
   
-    const velocity = new GridBuffer("velocity", device, gridSize, 3);
+    const velocity = new GridBuffer("velocity", device, gridSize, 4);
 
     const density = new GridBuffer("density", device, gridSize);
 
@@ -63,10 +63,34 @@ export async function initialize(canvas) {
         dimension: "3d",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
     });
+    
+    const pressureTexture = device.createTexture({
+        size: [gridSize, gridSize, gridSize],
+        format: "r32float",
+        dimension: "3d",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
+    });
+    
+    const divergenceTexture = device.createTexture({
+        size: [gridSize, gridSize, gridSize],
+        format: "r32float",
+        dimension: "3d",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
+    });
+    
+    const velocityTexture = device.createTexture({
+        size: [gridSize, gridSize, gridSize],
+        format: "rgba32float",
+        dimension: "3d",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
+    });
 
     const textures = {
-        smokeTexture: smokeTexture,
-        temperatureTexture: temperatureTexture,
+        smokeTexture,
+        temperatureTexture,
+        velocityTexture,
+        pressureTexture,
+        divergenceTexture,
     };
 
     const smokeSampler = device.createSampler({
@@ -84,6 +108,30 @@ export async function initialize(canvas) {
         magFilter: 'linear',
         minFilter: 'linear',
     });
+    
+    const velocitySampler = device.createSampler({
+        addressModeU: 'clamp-to-edge',
+        addressModeV: 'clamp-to-edge',
+        addressModeW: 'clamp-to-edge',
+        magFilter: 'nearest',
+        minFilter: 'nearest',
+    });
+    
+    const pressureSampler = device.createSampler({
+        addressModeU: 'clamp-to-edge',
+        addressModeV: 'clamp-to-edge',
+        addressModeW: 'clamp-to-edge',
+        magFilter: 'nearest',
+        minFilter: 'nearest',
+    });
+    
+    const divergenceSampler = device.createSampler({
+        addressModeU: 'clamp-to-edge',
+        addressModeV: 'clamp-to-edge',
+        addressModeW: 'clamp-to-edge',
+        magFilter: 'nearest',
+        minFilter: 'nearest',
+    });
 
 
     const computeShaders = {};
@@ -92,15 +140,27 @@ export async function initialize(canvas) {
 
     const sceneProps = await sceneInit(device, canvas, context, format);
 
-    function smokeRender(computePass, canvasTexture, readableTexture, localModel, model, view, projection, camPos, canvasWidth, canvasHeight) {
+    function smokeRender(computePass, canvasTexture, readableTexture, uniformMatrices, camPos, canvasWidth, canvasHeight) {
         computeShaders.render.renderPass(
             device,
             computePass,
-            [canvasTexture, readableTexture, smokeTexture, smokeSampler,
-            temperatureTexture, temperatureSampler, buffers.stepSize.buffer,
-            buffers.lightStepSize.buffer, buffers.absorption.buffer,
-            buffers.scattering.buffer, buffers.phase.buffer,
-            localModel, model, view, projection, camPos],
+            {0:[canvasTexture, readableTexture, smokeTexture, smokeSampler,
+                temperatureTexture, temperatureSampler],
+             1:[buffers.stepSize.buffer,
+                buffers.lightStepSize.buffer, buffers.absorption.buffer,
+                buffers.scattering.buffer, buffers.phase.buffer, camPos],
+             2:[uniformMatrices]},
+            canvasWidth / 8, canvasHeight / 8);
+    }
+
+    function debugRender(computePass, canvasTexture, readableTexture, uniformMatrices, camPos, canvasWidth, canvasHeight) {
+        computeShaders.debug.renderPass(
+            device,
+            computePass,
+            {0:[canvasTexture, readableTexture, pressureTexture, velocityTexture, divergenceTexture], 
+             1:[pressureSampler, velocitySampler, divergenceSampler],
+             2:[uniformMatrices],
+             3:[camPos, buffers.renderMode.buffer, buffers.stepSize.buffer]},
             canvasWidth / 8, canvasHeight / 8);
     }
     
@@ -112,6 +172,7 @@ export async function initialize(canvas) {
         textures,
         buffers,
         smokeRender,
+        debugRender,
         renderer:sceneProps.renderer,
         scene:sceneProps.scene,
         camera:sceneProps.camera,

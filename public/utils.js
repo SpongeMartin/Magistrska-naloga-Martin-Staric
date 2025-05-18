@@ -1,3 +1,4 @@
+import { gridSize } from "./init.js";
 import { shaderInit } from "./shaders/shaderInit.js";
 
 export class ComputeShader {
@@ -45,27 +46,32 @@ export class ComputeShader {
 
     renderPass(device,pass,entries,dispatchX,dispatchY) {
         pass.setPipeline(this.pipeline);
-        let bindingIndex = 0;
-        pass.setBindGroup(0, device.createBindGroup({
-            label: this.label,
-            layout: this.pipeline.getBindGroupLayout(0),
-            entries: entries.flatMap(element => {
-                if (element instanceof GridBuffer) {
-                    const bindings = [
-                        { binding: bindingIndex++, resource: { buffer: element.readBuffer } },
-                        { binding: bindingIndex++, resource: { buffer: element.writeBuffer } }
-                    ];
-                    return bindings;
-                } else if (element instanceof GPUTexture){
-                    return { binding: bindingIndex++, resource: element.createView() };
-                } else if (element instanceof GPUSampler){
-                    return { binding: bindingIndex++, resource: element };
-                } else {
-                    return { binding: bindingIndex++, resource: { buffer: element } };
-                }
-            })}));
+        for (const [key, elements] of Object.entries(entries)) {
+            let bindingIndex = 0;
+            let group = Number(key);
+            pass.setBindGroup(group, device.createBindGroup({
+                label: this.label + key,
+                layout: this.pipeline.getBindGroupLayout(key),
+                entries: elements.flatMap((element) => {
+                    if (element instanceof GridBuffer) {
+                        const bindings = [
+                            { binding: bindingIndex++, resource: { buffer: element.readBuffer } },
+                            { binding: bindingIndex++, resource: { buffer: element.writeBuffer } }
+                        ];
+                        return bindings;
+                    } else if (element instanceof GPUTexture){
+                        return { binding: bindingIndex++, resource: element.createView() };
+                    } else if (element instanceof GPUSampler){
+                        return { binding: bindingIndex++, resource: element };
+                    } else {
+                        
+                        return { binding: bindingIndex++, resource: { buffer: element } };
+                    }
+                })
+            }));
+            elements.forEach(entry => { if (entry instanceof GridBuffer) entry.swap(); });
+        }
         pass.dispatchWorkgroups(Math.floor(dispatchX), Math.floor(dispatchY));
-        entries.forEach(entry => { if (entry instanceof GridBuffer) entry.swap(); });
     }
 }
 
@@ -97,14 +103,14 @@ export class GridBuffer {
         this.label = label;
     }
 
-    async read(device,commandEncoder) {
-        await commandEncoder.copyBufferToBuffer(this.readBuffer, 0, this.copyBuffer, 0, 16 * 16 * 16 * 3);
+    async read(device, commandEncoder, gridSize) {
+        await commandEncoder.copyBufferToBuffer(this.readBuffer, 0, this.copyBuffer, 0, gridSize * gridSize * gridSize * this.components);
         device.queue.submit([commandEncoder.finish()]);
         await this.copyBuffer.mapAsync(GPUMapMode.READ);
         const arrayBuffer = this.copyBuffer.getMappedRange();
         const dataRead = new Float32Array(arrayBuffer);
         console.log([...dataRead]);
-        this.copyBuffer.unmap();
+        await this.copyBuffer.unmap();
     }
 
     swap() {
@@ -236,6 +242,7 @@ export function resetGrid(device, gridSize, gridBuffers, gridSizeBuffer, compute
 }
 
 async function readBufferToFloat32Array(device, buffer, size) {
+    size *= Float32Array.BYTES_PER_ELEMENT;
     // Create a buffer for reading the data
     const readBuffer = device.createBuffer({
         size: size,
@@ -256,9 +263,23 @@ async function readBufferToFloat32Array(device, buffer, size) {
     return floatArray;
 }
 
-export async function writeTexture(device, tex, data, gridSize){
-    let arr = await readBufferToFloat32Array(device,data,gridSize * gridSize * gridSize * Float32Array.BYTES_PER_ELEMENT);
-    device.queue.writeTexture(
+export async function writeTexture(device, tex, data, gridSize, components = 1){
+    let arr = await readBufferToFloat32Array(device, data, gridSize * gridSize * gridSize * components);
+    if (components == 3){
+        let arr2 = new Float32Array(gridSize * gridSize * gridSize * 4);
+        for (let i = 0; i < arr.length; i+=4){
+            arr2[i] = arr[i];
+            arr2[i+1] = arr[i+1];
+            arr2[i+2] = arr[i+2];
+            arr2[i+3] = 0.0;
+        }
+        device.queue.writeTexture(
+            { texture: tex },
+            arr2,
+            { bytesPerRow: gridSize * 4 * 4, rowsPerImage: gridSize },
+            { width: gridSize, height: gridSize, depthOrArrayLayers: gridSize })
+    }
+    else device.queue.writeTexture(
         { texture: tex },
         arr,
         { bytesPerRow: gridSize * 4, rowsPerImage: gridSize },
