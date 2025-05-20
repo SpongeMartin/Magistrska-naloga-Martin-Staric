@@ -1,5 +1,5 @@
-import { gridSize } from "./init.js";
-import { shaderInit } from "./shaders/shaderInit.js";
+import { gridSize as gs } from "./init.js";
+import { initGPUObjects } from "./shaders/shaderInit.js";
 
 export class ComputeShader {
     /**
@@ -103,8 +103,8 @@ export class GridBuffer {
         this.label = label;
     }
 
-    async read(device, commandEncoder, gridSize) {
-        await commandEncoder.copyBufferToBuffer(this.readBuffer, 0, this.copyBuffer, 0, gridSize * gridSize * gridSize * this.components);
+    async read(device, commandEncoder) {
+        await commandEncoder.copyBufferToBuffer(this.readBuffer, 0, this.copyBuffer, 0, gs.value * gs.value * gs.value * this.components);
         device.queue.submit([commandEncoder.finish()]);
         await this.copyBuffer.mapAsync(GPUMapMode.READ);
         const arrayBuffer = this.copyBuffer.getMappedRange();
@@ -117,18 +117,6 @@ export class GridBuffer {
         let tmp = this.readBuffer;
         this.readBuffer = this.writeBuffer;
         this.writeBuffer = tmp;
-    }
-
-    reset(device, size = 32) {
-        this.readBuffer = device.createBuffer({
-            size: size * size * size * this.components * Float32Array.BYTES_PER_ELEMENT,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-
-        this.writeBuffer = device.createBuffer({
-            size: size * size * size * this.components * Float32Array.BYTES_PER_ELEMENT,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
-        });
     }
 }
 
@@ -173,7 +161,7 @@ export function borderControl(in_arr,out_arr,out_val, fun_name = "borderControl"
     `};
 
 export class GUI {
-    constructor(device,buffers){
+    constructor(device, buffers){
         this.elements = {};
         const gui = document.createElement('div');
         gui.id = 'gui';
@@ -185,10 +173,8 @@ export class GUI {
 
     init(){
         Object.entries(this.buffers).forEach(([id, buffer]) => {
-            if (buffer.input) {
-                this.createInput(buffer, id, buffer.name, buffer.initial_value, buffer.min, buffer.max, buffer.step);
-            }
-          });
+            if (buffer.input) this.createInput(buffer, id, buffer.name, buffer.initial_value, buffer.min, buffer.max, buffer.step);
+        });
     }
 
     createInput(buffer, id, label, defaultValue, min, max, step){
@@ -204,6 +190,10 @@ export class GUI {
             const value = parseFloat(e.target.value);
             buffer.update(value);
             this.updateDisplay(id, value);
+            if (label == "Grid Size") {
+                initGPUObjects(this.device, value);
+                gs.value = value;
+            }
         });
         const labelElement = document.createElement('label');
         labelElement.textContent = label;
@@ -233,14 +223,6 @@ export class GUI {
     }
 }
 
-export function resetGrid(device, gridSize, gridBuffers, gridSizeBuffer, computeShaders) {
-    Object.entries(gridBuffers).forEach(([_,gridBuffer]) => {
-        gridBuffer.reset(device,gridSize);
-    });
-    device.queue.writeBuffer(gridSizeBuffer, 0, new Uint32Array([gridSize]));
-    shaderInit(device,computeShaders);
-}
-
 async function readBufferToFloat32Array(device, buffer, size) {
     size *= Float32Array.BYTES_PER_ELEMENT;
     // Create a buffer for reading the data
@@ -263,27 +245,27 @@ async function readBufferToFloat32Array(device, buffer, size) {
     return floatArray;
 }
 
-export async function writeTexture(device, tex, data, gridSize, components = 1){
-    let arr = await readBufferToFloat32Array(device, data, gridSize * gridSize * gridSize * components);
-    if (components == 3){
-        let arr2 = new Float32Array(gridSize * gridSize * gridSize * 4);
-        for (let i = 0; i < arr.length; i+=4){
-            arr2[i] = arr[i];
-            arr2[i+1] = arr[i+1];
-            arr2[i+2] = arr[i+2];
+export async function writeTexture(device, tex, data, components = 1){
+    let arr = await readBufferToFloat32Array(device, data, gs.value ** 3 * components);
+    if (components == 4){
+        let arr2 = new Float32Array(gs.value ** 3 * 4);
+        for (let i = 0, j = 0; j < arr.length; i+=3, j+=3){
+            arr2[i] = arr[j];
+            arr2[i+1] = arr[j+1];
+            arr2[i+2] = arr[j+2];
             arr2[i+3] = 0.0;
         }
         device.queue.writeTexture(
             { texture: tex },
             arr2,
-            { bytesPerRow: gridSize * 4 * 4, rowsPerImage: gridSize },
-            { width: gridSize, height: gridSize, depthOrArrayLayers: gridSize })
+            { bytesPerRow: gs.value * 4 * 4, rowsPerImage: gs.value },
+            { width: gs.value, height: gs.value, depthOrArrayLayers: gs.value })
     }
     else device.queue.writeTexture(
         { texture: tex },
         arr,
-        { bytesPerRow: gridSize * 4, rowsPerImage: gridSize },
-        { width: gridSize, height: gridSize, depthOrArrayLayers: gridSize });
+        { bytesPerRow: gs.value * 4, rowsPerImage: gs.value },
+        { width: gs.value, height: gs.value, depthOrArrayLayers: gs.value });
 }
 
 class Buffer {

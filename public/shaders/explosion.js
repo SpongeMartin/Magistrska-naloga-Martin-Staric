@@ -19,7 +19,7 @@ export function explosionShader(device, computeShaders) {
         let cellPos = vec3<f32>(f32(x), f32(y), f32(z));
         let toCell = cellPos - explosionPos;
         let dist = length(toCell);
-        let rad = 6.0; // Effected area
+        let rad = f32(gridSize) / 6.0; // Effected area
         let strength = 10000.0; // How much force is applied
         let dissipate = 1.0;
         let density_factor = 0.05;

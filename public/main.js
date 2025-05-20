@@ -28,9 +28,9 @@ async function main() {
     } = await initialize(canvas);
 
     let mouseClick = false;
-    let jacobi_iterations = 100;
-    let diffusion_iterations = 40;
-    let debug = false;
+    let jacobi_iterations = 20;
+    let diffusion_iterations = 10;
+    let debug = true;
     let pause = false;
     let frame_forward = false;
 
@@ -53,8 +53,8 @@ async function main() {
         const mouseX = (event.clientX - rect.left) / rect.width * gridSize;
         const mouseY = (event.clientY - rect.top) / rect.height * gridSize;
         device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([mouseX, mouseY,Math.random() * (18 - 12) + 12])); */
-        let low = gridSize / 2 - 4;
-        let high = gridSize / 2 + 4;
+        let low = gridSize.value / 2 - 4;
+        let high = gridSize.value / 2 + 4;
         device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([Math.random() * (high - low) + low, Math.random() * (high - low) + low, Math.random() * (high - low) + low]));
         mouseClick = true;
     });
@@ -86,7 +86,7 @@ async function main() {
         mouseClick = false;
         }
 
-        for (let i = 0; i < 0; i++){
+        for (let i = 0; i < diffusion_iterations; i++){
             computeShaders.diffuse.computePass(
                 device,
                 pass,
@@ -139,12 +139,12 @@ async function main() {
         [gridBuffers.velocity.readBuffer, gridBuffers.pressure.readBuffer, buffers.gridSize.buffer],
         workgroup_size, workgroup_size, workgroup_size);
 
-        writeTexture(device, textures.smokeTexture, gridBuffers.density.readBuffer, gridSize);
-        writeTexture(device, textures.temperatureTexture, gridBuffers.temperature.readBuffer, gridSize);
-        if (debug){
-            writeTexture(device, textures.pressureTexture, gridBuffers.pressure.readBuffer, gridSize);
-            writeTexture(device, textures.divergenceTexture, gridBuffers.divergence.readBuffer, gridSize);
-            writeTexture(device, textures.velocityTexture, gridBuffers.velocity.readBuffer, gridSize, 3);
+        writeTexture(device, textures.smokeTexture, gridBuffers.density.readBuffer);
+        writeTexture(device, textures.temperatureTexture, gridBuffers.temperature.readBuffer);
+        if (debug) {
+            writeTexture(device, textures.pressureTexture, gridBuffers.pressure.readBuffer);
+            writeTexture(device, textures.divergenceTexture, gridBuffers.divergence.readBuffer);
+            writeTexture(device, textures.velocityTexture, gridBuffers.velocity.readBuffer, 4);
         }
     }
 
@@ -157,7 +157,7 @@ async function main() {
         const timeArray = new Float32Array([deltaTime]);
         device.queue.writeBuffer(buffers.time.buffer,0,timeArray.buffer,0,timeArray.byteLength);
 
-        const workgroup_size = gridSize / 4;
+        const workgroup_size = gridSize.value / 4;
 
         resizeCanvasToDisplaySize(canvas);
 

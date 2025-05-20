@@ -61,6 +61,12 @@ export function debugShader(device, computeShaders) {
         return textureSampleLevel(texture, sampler, tex_coords, 0.0).r;
     }
 
+    fn sample_velocity(pos: vec3<f32>, cube_min: vec3<f32>, cube_max: vec3<f32>, texture: texture_3d<f32>, sampler: sampler) -> vec3<f32>{
+        // Convert from world-space to texture space [0..1]
+        let tex_coords = (pos - cube_min) / (cube_max - cube_min);
+        return textureSampleLevel(texture, sampler, tex_coords, 0.0).rgb;
+    }
+
     fn getWorldBoundingBox() -> array<vec3<f32>, 2> {
         let corners = array<vec3<f32>, 8>(
             vec3<f32>(-1.0, -1.0, -1.0),
@@ -100,7 +106,7 @@ export function debugShader(device, computeShaders) {
         let uv = (vec2<f32>(index) + vec2<f32>(0.5)) / vec2<f32>(size);
         var ndc = uv * 2.0 - vec2<f32>(1.0); // * image aspect ratio for x coordinate later when fullscreen
         ndc.y = 1.0 - 1.0 * ndc.y;
-        ndc = ndc * PI/4.0;
+        ndc = ndc * PI / 4.0;
 
         let clip = vec4<f32>(ndc, -1.0, 1.0);
 
@@ -110,9 +116,6 @@ export function debugShader(device, computeShaders) {
         let world = (uMatrices.inverseViewMatrix * vec4<f32>(viewNDC, 1.0)).xyz;
 
         let ray_dir = normalize(world - cameraPosition);
-
-
-        let ray_dir_normalized = ray_dir * 0.5 + vec3<f32>(0.5); // [-1,1] → [0,1]
         
 
         // Intersect the ray with the cube
@@ -142,12 +145,8 @@ export function debugShader(device, computeShaders) {
                     density = vec3<f32>(0.0, 0.0, measure);
                 }
             } else if (renderMode == 1) {
-                measure = sample_texture(pos, cube_min, cube_max, velocityTexture, velocitySampler);
-                if (measure > 0.0) {
-                    density = vec3<f32>(measure, 0.0, 0.0);
-                } else {
-                    density = vec3<f32>(0.0, 0.0, measure);
-                }
+                density = sample_velocity(pos, cube_min, cube_max, velocityTexture, velocitySampler);
+                measure = density.x;
             } else if (renderMode == 2) {
                 measure = sample_texture(pos, cube_min, cube_max, divergenceTexture, divergenceSampler);
                 if (measure > 0.0) {
@@ -157,7 +156,7 @@ export function debugShader(device, computeShaders) {
                 }
             } else if(renderMode == 3) {
                 if (index.x % 1 == 0u || index.y % 1 == 0u) {
-                    let debug_color = vec4<f32>(ray_dir_normalized, 1.0);
+                    let debug_color = 1.0;
                     textureStore(texture, index, vec4<f32>(1.0, 0.0, 0.0, 1.0));
                 }
 
