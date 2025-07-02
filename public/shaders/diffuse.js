@@ -46,7 +46,7 @@ export function diffuseShader(device, computeShaders) {
         
         density_out[idx] = (xC + xAlpha * (xL + xR + xB + xT + xF + xBa)) * xBeta;
 
-        //borderControl(1, x, y, z, idx);
+        borderControl(1, x, y, z, idx);
         
         // Temperature
 
@@ -64,6 +64,6 @@ export function diffuseShader(device, computeShaders) {
         
         temperature_out[idx] = (tC + tAlpha * (tL + tR + tB + tT + tF + tBa)) * tBeta;
 
-        //temp_border(1, x, y, z, idx);
+        temp_border(1, x, y, z, idx);
     }`);
 }

@@ -29,7 +29,7 @@ export async function sceneInit(device, canvas, context, format){
     const renderer = new UnlitRenderer(device, canvas, context, format);
     const resources = await loadResources({
         'mesh': new URL('/floor/floor.json', import.meta.url),
-        'image': new URL('/floor/grass.png', import.meta.url),
+        'image': new URL('/floor/grass2.png', import.meta.url),
     });
     await renderer.initialize();
     

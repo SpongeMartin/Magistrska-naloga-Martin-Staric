@@ -30,7 +30,7 @@ async function main() {
     let mouseClick = false;
     let jacobi_iterations = 20;
     let diffusion_iterations = 10;
-    let debug = true;
+    let debug = false;
     let pause = false;
     let frame_forward = false;
 
@@ -179,7 +179,7 @@ async function main() {
             [canvas.width, canvas.height, 1]
         );
 
-        const explosion = new Transform({translation: [0.0, 2.0, -6.0], scale: [1.0, 1.0, 1.0]});
+        const explosion = new Transform({translation: [0.0, 3.0, -6.0], scale: [3.0, 3.0, 3.0]});
 
         const transform = camera.getComponentOfType(Transform);
 

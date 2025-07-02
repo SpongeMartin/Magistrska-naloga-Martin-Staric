@@ -19,7 +19,7 @@ export function gradientSubstractionShader(device, computeShaders) {
         let idx = x + y * gs + z * gs2;
         
 
-        //borderControl(1, x, y, z, idx);
+        borderControl(1, x, y, z, idx);
 
         let pL = pressure_in[clamp(x - 1, 0, gs) + y * gs + z * gs2];
         let pR = pressure_in[clamp(x + 1, 0, gs) + y * gs + z * gs2];
@@ -30,6 +30,6 @@ export function gradientSubstractionShader(device, computeShaders) {
         
         velocity[idx] -= vec3<f32>((pR - pL),(pT - pB),(pF - pBa)) * .5;
 
-        //velocityBorder(1, x, y, z, idx);
+        velocityBorder(1, x, y, z, idx);
     }`);
 }

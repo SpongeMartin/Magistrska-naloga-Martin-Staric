@@ -66,6 +66,6 @@ export function advectShader(device, computeShaders) {
 
         density_out[idx] = result;
 
-        //borderControl(1, x, y, z, idx);
+        borderControl(1, x, y, z, idx);
     }`);
 }

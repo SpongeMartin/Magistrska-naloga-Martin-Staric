@@ -124,7 +124,7 @@ export function renderingShader(device, computeShaders) {
         let extinction = uAbsorption + uScattering;
         let scatter = vec3(1.0);
         let li_color = vec3(1.0);
-        let li_pos = vec3(3.0,-3.0,-3.0);
+        let li_pos = vec3(30.0,30.0,-30.0);
         var transmittance = 1.0;
         var final_color = textureLoad(readTexture, vec2i(i32(index.x), i32(index.y))).xyz;
         let offset = hash(f32(index.x) + f32(index.y) * f32(size.x)); // Random offset for jittering

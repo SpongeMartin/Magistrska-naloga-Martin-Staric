@@ -26,11 +26,11 @@ export function initGPUObjects(device, gridSize){
     createBuffer(device, buffers, "gridSize", "Grid Size", 4, gridSize, 16, 128, 16,Int32Array);
     createBuffer(device, buffers, "renderMode", "Render Mode", 4, 0, undefined, undefined, undefined, Int32Array);
     createBuffer(device, buffers, "time", "Time", 4);
-    createBuffer(device, buffers, "absorption", "Absorption", 4, 0.35, 0.0, 10.0, 0.05);
-    createBuffer(device, buffers, "scattering", "Scattering", 4, 36.0, 0.0, 100.0, 0.1);
-    createBuffer(device, buffers, "stepSize", "Step Size", 4, 0.15, 0.02, 0.5, 0.01);
+    createBuffer(device, buffers, "absorption", "Absorption", 4, 0.15, 0.0, 10.0, 0.05);
+    createBuffer(device, buffers, "scattering", "Scattering", 4, 59.6, 0.0, 100.0, 0.1);
+    createBuffer(device, buffers, "stepSize", "Step Size", 4, 0.05, 0.02, 0.5, 0.01);
     createBuffer(device, buffers, "lightStepSize", "Light Step Size", 4);
-    createBuffer(device, buffers, "phase", "Phase", 4, 0.3, -1.0, 1.0, 0.01);
+    createBuffer(device, buffers, "phase", "Phase", 4, 0.08, -1.0, 1.0, 0.01);
     createBuffer(device, buffers, "viscosity", "Viscosity", 4, 1.0, 0.0, 10.0, 0.1);
     createBuffer(device, buffers, "decay", "Decay", 4, 0.999, 0.950, 1.0, 0.001);
     createBuffer(device, buffers, "tViscosity", "Temperature Viscosity", 4, 1.0, 0.0, 10.0, 0.1);

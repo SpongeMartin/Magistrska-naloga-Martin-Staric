@@ -3,7 +3,7 @@ import { shaderInit, initGPUObjects } from "./shaders/shaderInit.js";
 import { sceneInit } from "./scene.js"
 
 
-export const gridSize = {value: 32};
+export const gridSize = {value: 64};
 
 export async function loadShader(filePath) {
     const response = await fetch(filePath);
