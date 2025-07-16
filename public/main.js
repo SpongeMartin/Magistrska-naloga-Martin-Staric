@@ -1,9 +1,10 @@
 import { initialize, gridSize } from './init.js';
-import { writeTexture, GUI } from './utils.js';
+import { writeTexture, GUI, readBufferToFloat32Array } from './utils.js';
 import { updateScene } from './scene.js';
 import { Transform } from '/core.js';
 import { getGlobalViewMatrix, getProjectionMatrix } from "./core/SceneUtils.js";
 import { mat4 } from '/glm.js';
+import { explosionInstance } from './shaders/shaderInit.js';
 
 async function main() {
     const canvas = document.getElementById("gpuCanvas");
@@ -17,8 +18,7 @@ async function main() {
         device,
         context,
         computeShaders,
-        gridBuffers,
-        textures,
+        allInstanceData,
         buffers,
         smokeRender,
         debugRender,
@@ -56,6 +56,7 @@ async function main() {
         let low = gridSize.value / 2 - 4;
         let high = gridSize.value / 2 + 4;
         device.queue.writeBuffer(buffers.explosionLocation.buffer, 0, new Float32Array([Math.random() * (high - low) + low, Math.random() * (high - low) + low, Math.random() * (high - low) + low]));
+        explosionInstance(device, gridSize.value);
         mouseClick = true;
     });
 
@@ -73,24 +74,24 @@ async function main() {
         }
     });
 
-    function passage(device, pass, workgroup_size){
+    function passage(device, pass, workgroup_size, instanceBuffers, instanceTextures){
         if (mouseClick){
-        computeShaders.explosion.computePass(
-            device,
-            pass,
-            [gridBuffers.velocity.readBuffer,gridBuffers.density.readBuffer,
-            gridBuffers.pressure.readBuffer,gridBuffers.temperature.readBuffer,
-            buffers.explosionLocation.buffer,buffers.gridSize.buffer],
-            workgroup_size, workgroup_size, workgroup_size);
-        console.log("boom");
-        mouseClick = false;
+            computeShaders.explosion.computePass(
+                device,
+                pass,
+                [instanceBuffers.velocity.readBuffer,instanceBuffers.density.readBuffer,
+                instanceBuffers.pressure.readBuffer,instanceBuffers.temperature.readBuffer,
+                buffers.explosionLocation.buffer,buffers.gridSize.buffer],
+                workgroup_size, workgroup_size, workgroup_size);
+            console.log("boom");
+            mouseClick = false;
         }
 
         for (let i = 0; i < diffusion_iterations; i++){
             computeShaders.diffuse.computePass(
                 device,
                 pass,
-                [gridBuffers.density, gridBuffers.temperature,
+                [instanceBuffers.density, instanceBuffers.temperature,
                 buffers.gridSize.buffer, buffers.time.buffer, 
                 buffers.viscosity.buffer, buffers.tViscosity.buffer],
                 workgroup_size,workgroup_size,workgroup_size);
@@ -99,14 +100,14 @@ async function main() {
         computeShaders.velocity.computePass(
         device,
         pass,
-        [gridBuffers.velocity, gridBuffers.temperature.readBuffer,
+        [instanceBuffers.velocity, instanceBuffers.temperature.readBuffer,
         buffers.gridSize.buffer, buffers.time.buffer],
         workgroup_size, workgroup_size, workgroup_size);
 
         computeShaders.advect.computePass(
         device,
         pass,
-        [gridBuffers.velocity.readBuffer, gridBuffers.density,
+        [instanceBuffers.velocity.readBuffer, instanceBuffers.density,
         buffers.gridSize.buffer, buffers.time.buffer, 
         buffers.decay.buffer],
         workgroup_size, workgroup_size, workgroup_size);
@@ -114,7 +115,7 @@ async function main() {
         computeShaders.advect.computePass(
         device,
         pass,
-        [gridBuffers.velocity.readBuffer, gridBuffers.temperature, 
+        [instanceBuffers.velocity.readBuffer, instanceBuffers.temperature, 
         buffers.gridSize.buffer, buffers.time.buffer, 
         buffers.decay.buffer],
         workgroup_size, workgroup_size, workgroup_size);
@@ -122,29 +123,29 @@ async function main() {
         computeShaders.divergence.computePass(
         device,
         pass,
-        [gridBuffers.divergence.readBuffer, gridBuffers.velocity.readBuffer, buffers.gridSize.buffer],
+        [instanceBuffers.divergence.readBuffer, instanceBuffers.velocity.readBuffer, buffers.gridSize.buffer],
         workgroup_size, workgroup_size, workgroup_size);
 
         for (let i = 0; i < jacobi_iterations; i++){
         computeShaders.pressure.computePass(
             device,
             pass,
-            [gridBuffers.divergence.readBuffer, gridBuffers.pressure, buffers.gridSize.buffer],
+            [instanceBuffers.divergence.readBuffer, instanceBuffers.pressure, buffers.gridSize.buffer],
             workgroup_size, workgroup_size, workgroup_size);
         }
         
         computeShaders.substract.computePass(
         device,
         pass,
-        [gridBuffers.velocity.readBuffer, gridBuffers.pressure.readBuffer, buffers.gridSize.buffer],
+        [instanceBuffers.velocity.readBuffer, instanceBuffers.pressure.readBuffer, buffers.gridSize.buffer],
         workgroup_size, workgroup_size, workgroup_size);
 
-        writeTexture(device, textures.smokeTexture, gridBuffers.density.readBuffer);
-        writeTexture(device, textures.temperatureTexture, gridBuffers.temperature.readBuffer);
+        writeTexture(device, instanceTextures.smokeTexture, instanceBuffers.density.readBuffer);
+        writeTexture(device, instanceTextures.temperatureTexture, instanceBuffers.temperature.readBuffer);
         if (debug) {
-            writeTexture(device, textures.pressureTexture, gridBuffers.pressure.readBuffer);
-            writeTexture(device, textures.divergenceTexture, gridBuffers.divergence.readBuffer);
-            writeTexture(device, textures.velocityTexture, gridBuffers.velocity.readBuffer, 4);
+            writeTexture(device, instanceTextures.pressureTexture, instanceBuffers.pressure.readBuffer);
+            writeTexture(device, instanceTextures.divergenceTexture, instanceBuffers.divergence.readBuffer);
+            writeTexture(device, instanceTextures.velocityTexture, instanceBuffers.velocity.readBuffer, 4);
         }
     }
 
@@ -175,7 +176,7 @@ async function main() {
         
         commandEncoder.copyTextureToTexture(
             { texture: canvasTexture },
-            { texture: readableTexture },
+            { texture: readableTexture /* This is what is already displayed on the texture */ },
             [canvas.width, canvas.height, 1]
         );
 
@@ -209,21 +210,28 @@ async function main() {
 
         device.queue.writeBuffer(cameraPos, 0, camPos.buffer);
 
-        const computePass = commandEncoder.beginComputePass();
+        if (allInstanceData.length > 0){
+            const computePass = commandEncoder.beginComputePass();
 
-        if (!pause) {
-            passage(device,computePass,workgroup_size);
-        } else if(frame_forward) {
-            passage(device,computePass,workgroup_size);
-            frame_forward = false;
+            if (!pause) {
+                allInstanceData.forEach(({instanceBuffers, instanceTextures}) => passage(device,computePass,workgroup_size,instanceBuffers,instanceTextures));
+            } else if(frame_forward) {
+                allInstanceData.forEach(({instanceBuffers, instanceTextures}) => passage(device,computePass,workgroup_size,instanceBuffers,instanceTextures));
+                frame_forward = false;
+            }
+
+            
+            if (debug) {
+                allInstanceData.forEach(({instanceBuffers, instanceTextures}) => 
+                    debugRender(computePass, canvasTexture, readableTexture, uniformMatrices, cameraPos, canvas.width, canvas.height, instanceTextures));
+            } else {
+                allInstanceData.forEach(({instanceBuffers, instanceTextures}) =>
+                    smokeRender(computePass, canvasTexture, readableTexture, uniformMatrices, cameraPos, canvas.width, canvas.height, instanceTextures));
+            }
+            computePass.end();
+
+            device.queue.submit([commandEncoder.finish()]);
         }
-
-        
-        if (debug) debugRender(computePass, canvasTexture, readableTexture, uniformMatrices, cameraPos, canvas.width, canvas.height);
-        else smokeRender(computePass, canvasTexture, readableTexture, uniformMatrices, cameraPos, canvas.width, canvas.height);
-        computePass.end();
-
-        device.queue.submit([commandEncoder.finish()]);
         
         requestAnimationFrame(frame);
     }

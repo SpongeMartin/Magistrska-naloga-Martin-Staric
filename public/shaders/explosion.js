@@ -23,7 +23,7 @@ export function explosionShader(device, computeShaders) {
         let strength = 10000.0; // How much force is applied
         let dissipate = 1.0;
         let density_factor = 0.05;
-        let temp_factor = 0.10;
+        let temp_factor = 0.20;
 
         let atLeft = (x == 0);
         let atRight = (x == gridSize);

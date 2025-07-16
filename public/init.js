@@ -1,4 +1,4 @@
-import { shaderInit, initGPUObjects } from "./shaders/shaderInit.js";
+import { shaderInit, initBuffers } from "./shaders/shaderInit.js";
 
 import { sceneInit } from "./scene.js"
 
@@ -14,8 +14,7 @@ export async function loadShader(filePath) {
 }
 
 export const buffers = {};
-export const gridBuffers = {};
-export const textures = {};
+export const allInstanceData = [];
   
 export async function initialize(canvas) {
     const adapter = await navigator.gpu.requestAdapter();
@@ -70,11 +69,11 @@ export async function initialize(canvas) {
 
     const computeShaders = {}
     shaderInit(device, computeShaders);
-    initGPUObjects(device, gridSize.value);
+    initBuffers(device, gridSize.value);
 
     const sceneProps = await sceneInit(device, canvas, context, format);
 
-    function smokeRender(computePass, canvasTexture, readableTexture, uniformMatrices, camPos, canvasWidth, canvasHeight) {
+    function smokeRender(computePass, canvasTexture, readableTexture, uniformMatrices, camPos, canvasWidth, canvasHeight, textures) {
         computeShaders.render.renderPass(
             device,
             computePass,
@@ -87,7 +86,7 @@ export async function initialize(canvas) {
             canvasWidth / 8, canvasHeight / 8);
     }
 
-    function debugRender(computePass, canvasTexture, readableTexture, uniformMatrices, camPos, canvasWidth, canvasHeight) {
+    function debugRender(computePass, canvasTexture, readableTexture, uniformMatrices, camPos, canvasWidth, canvasHeight, textures) {
         computeShaders.debug.renderPass(
             device,
             computePass,
@@ -102,8 +101,7 @@ export async function initialize(canvas) {
         device,
         context,
         computeShaders,
-        gridBuffers,
-        textures,
+        allInstanceData,
         buffers,
         smokeRender,
         debugRender,
@@ -112,4 +110,3 @@ export async function initialize(canvas) {
         camera:sceneProps.camera,
     };
 }
-  

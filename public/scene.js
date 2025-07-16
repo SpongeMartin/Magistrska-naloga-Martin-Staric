@@ -1,5 +1,6 @@
 import * as WebGPU from '/WebGPU.js';
 
+import { GLTFLoader } from '/loaders/GLTFLoader.js';
 import { FirstPersonController } from '/controllers/FirstPersonController.js';
 
 import {
@@ -12,6 +13,11 @@ import {
     Texture,
     Transform,
 } from '/core.js';
+
+import {
+    calculateAxisAlignedBoundingBox,
+    mergeAxisAlignedBoundingBoxes,
+} from '/core/MeshUtils.js';
 
 import { loadResources } from '/loaders/resources.js';
 
@@ -27,6 +33,8 @@ export function updateScene(scene, t, dt) {
 
 export async function sceneInit(device, canvas, context, format){
     const renderer = new UnlitRenderer(device, canvas, context, format);
+    const loader = new GLTFLoader();
+    await loader.load(new URL('./scene.gltf', import.meta.url));
     const resources = await loadResources({
         'mesh': new URL('/floor/floor.json', import.meta.url),
         'image': new URL('/floor/grass2.png', import.meta.url),
@@ -41,6 +49,7 @@ export async function sceneInit(device, canvas, context, format){
     }));
     camera.addComponent(new Camera());
     camera.addComponent(new FirstPersonController(camera, canvas));
+
     scene.addChild(camera);
     
     const floor = new Node();
@@ -66,6 +75,22 @@ export async function sceneInit(device, canvas, context, format){
         ],
     }));
     scene.addChild(floor);
+
+    const boxes = Array.from({ length: 6 }, (_, i) => loader.loadNode(`Box.00${i}`));
+
+    boxes.forEach((box) => scene.addChild(box));
+
+    scene.traverse(node => {
+        const model = node.getComponentOfType(Model);
+        if (!model) {
+            return;
+        }
+
+        const boxes = model.primitives.map(primitive => calculateAxisAlignedBoundingBox(primitive.mesh));
+        node.aabb = mergeAxisAlignedBoundingBoxes(boxes);
+    });
+    
+    console.log(scene);
 
     const explosion = new Node();
     explosion.addComponent(new Transform());

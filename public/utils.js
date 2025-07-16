@@ -1,5 +1,5 @@
 import { gridSize as gs } from "./init.js";
-import { initGPUObjects } from "./shaders/shaderInit.js";
+
 
 export class ComputeShader {
     /**
@@ -191,7 +191,8 @@ export class GUI {
             buffer.update(value);
             this.updateDisplay(id, value);
             if (label == "Grid Size") {
-                initGPUObjects(this.device, value);
+                console.log("TODO")
+                // Either reinstantiate all the smokes or remove them from the list
                 gs.value = value;
             }
         });
@@ -223,7 +224,7 @@ export class GUI {
     }
 }
 
-async function readBufferToFloat32Array(device, buffer, size) {
+export async function readBufferToFloat32Array(device, buffer, size) {
     size *= Float32Array.BYTES_PER_ELEMENT;
     // Create a buffer for reading the data
     const readBuffer = device.createBuffer({
@@ -269,7 +270,7 @@ export async function writeTexture(device, tex, data, components = 1){
 }
 
 class Buffer {
-    constructor(device, name, size, value, min, max, step, usage = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, type = Float32Array) {
+    constructor(device, name, size, value, min, max, step, input = false, usage = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, type = Float32Array) {
         this.device = device;
         this._name = name;
         this._buffer = device.createBuffer({
@@ -281,7 +282,7 @@ class Buffer {
             this.update(value);
             this.initial_value = value;
         }
-        if (max) {
+        if (input) {
             this._max = max;
             this._min = min;
             this._step = step;
@@ -322,6 +323,69 @@ class Buffer {
     }
 }
 
-export function createBuffer(device, buffers, id, name, size, value, min, max, step, type = Float32Array, usage = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST) {
-    buffers[id] = new Buffer(device, name, size, value, min, max, step, usage, type);
+export function createBuffer(device, buffers, id, name, size, value, min, max, step, input = false, type = Float32Array, usage = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST) {
+    buffers[id] = new Buffer(device, name, size, value, min, max, step, input, usage, type);
+}
+
+function getForwardDirection(node) {
+    const matrix = getGlobalModelMatrix(node);
+    const forwardLocal = [0, 0, -1, 0]; // direction vector in local space
+    const forwardWorld = vec4.transformMat4(vec4.create(), forwardLocal, matrix);
+    return vec3.normalize(vec3.create(), forwardWorld.slice(0, 3));
+}
+
+function intersectRayAABB(origin, dir, min, max) {
+    let tmin = -Infinity;
+    let tmax = Infinity;
+
+    for (let i = 0; i < 3; i++) {
+        if (Math.abs(dir[i]) < 1e-6) {
+            if (origin[i] < min[i] || origin[i] > max[i]) return null;
+        } else {
+            const invD = 1 / dir[i];
+            let t1 = (min[i] - origin[i]) * invD;
+            let t2 = (max[i] - origin[i]) * invD;
+            if (t1 > t2) [t1, t2] = [t2, t1];
+            tmin = Math.max(tmin, t1);
+            tmax = Math.min(tmax, t2);
+            if (tmin > tmax) return null;
+        }
+    }
+
+    if (tmin < 0 || tmin > 5) return null;
+    return {
+        distance: tmin,
+    };
+}
+
+export function raycastAABBsFromCamera(scene, camera, maxDistance = 5) {
+    /**
+    * Used to determine the location of where to instantiate the explosion effect.
+    * @param {Node} scene - Root of the scene
+    * @param {Camera} camera - The camera
+    * @param {number} [maxDistance = 5] - Maximum ray length before explosion
+    * @returns {{
+    *   hit: boolean,
+    *   point: vec3,
+    *   distance: number
+    * }}
+    */
+    const origin = vec3.clone(vec3.transformMat4(getGlobalModelMatrix(camera)));
+    const direction = getForwardDirection(camera);
+
+    let closest = null;
+    let closestDist = maxDistance;
+    for (const {aabb} of scene.getComponentsOfType(Model)){
+        const hit = intersectRayAABB(origin, direction, aabb.min, aabb.max);
+        if (hit && hit.distance < closestDist){
+            closestDist = hit.distance;
+            closest = hit;
+        }
+    }
+    return {
+        hit: closest != null,
+        object: closest,
+        distance: closestDist,
+    }
+
 }

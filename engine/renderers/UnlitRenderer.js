@@ -45,7 +45,7 @@ export class UnlitRenderer{
 
     async initialize() {
 
-        const code = `struct VertexInput {
+        const code = /*wgsl*/ `struct VertexInput {
                         @location(0) position: vec3f,
                         @location(1) texcoords: vec2f,
                     }

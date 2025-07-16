@@ -59,11 +59,11 @@ export function renderingShader(device, computeShaders) {
 
     fn temperature_to_color(temperature: f32) -> vec3<f32> {
         let minTemp = 0.0;
-        let maxTemp = 1.0;
+        let maxTemp = 255.0;
         
         let t = clamp((temperature - minTemp) / (maxTemp - minTemp), 0.0, 1.0);
 
-        let color = mix(vec3(1.0, 1.0, 1.0), vec3(3.5, 0.8, 0.0), t);  // White to red
+        let color = mix(vec3(1.0, 1.0, 1.0), vec3(0.9, 0.31, 0.19), t*4000);  // White to red
         return color;
     }
 
@@ -138,7 +138,7 @@ export function renderingShader(device, computeShaders) {
             let density = sample_texture(pos, cube_min, cube_max, smokeTexture, smokeSampler);
             let temperature = sample_texture(pos, cube_min, cube_max, temperatureTexture, temperatureSampler);
 
-            let absorption = uAbsorption * density;
+            let absorption = uAbsorption * density * 2;
             transmittance *= exp(-uStepSize * absorption * extinction);
             
             let li_dir = normalize(li_pos - pos);
@@ -162,7 +162,7 @@ export function renderingShader(device, computeShaders) {
                 let li_transmittance = exp(-li_density * liStepSize * extinction);
                 final_color += scatter *                                // light color
                             li_transmittance *                          // light ray transmission value
-                            henyey_greenstein(uPhase, cos_theta) * 5 *  // phase function
+                            henyey_greenstein(uPhase, cos_theta) * 30 *  // phase function
                             uScattering *                               // scattering coefficient
                             transmittance *                             // ray current transmission value
                             uStepSize *
