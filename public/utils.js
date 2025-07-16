@@ -1,4 +1,7 @@
 import { gridSize as gs } from "./init.js";
+import { vec3, vec4 } from "./glm.js";
+import { getGlobalModelMatrix } from "/core/SceneUtils.js";
+import { Model } from "/core/Model.js";
 
 
 export class ComputeShader {
@@ -330,7 +333,8 @@ export function createBuffer(device, buffers, id, name, size, value, min, max, s
 function getForwardDirection(node) {
     const matrix = getGlobalModelMatrix(node);
     const forwardLocal = [0, 0, -1, 0]; // direction vector in local space
-    const forwardWorld = vec4.transformMat4(vec4.create(), forwardLocal, matrix);
+    const forwardWorld = vec4.create()
+    vec4.transformMat4(forwardWorld, forwardLocal, matrix);
     return vec3.normalize(vec3.create(), forwardWorld.slice(0, 3));
 }
 
@@ -352,7 +356,6 @@ function intersectRayAABB(origin, dir, min, max) {
         }
     }
 
-    if (tmin < 0 || tmin > 5) return null;
     return {
         distance: tmin,
     };
@@ -370,22 +373,39 @@ export function raycastAABBsFromCamera(scene, camera, maxDistance = 5) {
     *   distance: number
     * }}
     */
-    const origin = vec3.clone(vec3.transformMat4(getGlobalModelMatrix(camera)));
+    const origin = vec3.create();
+    vec3.transformMat4(origin, origin, getGlobalModelMatrix(camera));
     const direction = getForwardDirection(camera);
 
     let closest = null;
     let closestDist = maxDistance;
-    for (const {aabb} of scene.getComponentsOfType(Model)){
-        const hit = intersectRayAABB(origin, direction, aabb.min, aabb.max);
-        if (hit && hit.distance < closestDist){
-            closestDist = hit.distance;
-            closest = hit;
+    scene.traverse(node => {
+        const model = node.getComponentOfType(Model);
+        if (model){
+            const hit = intersectRayAABB(origin, direction, node.aabb.min, node.aabb.max);
+            if (hit && hit.distance < closestDist && hit.distance >= -1){
+                closestDist = hit.distance;
+                closest = hit;
+            }
         }
-    }
+    });
+
+    console.log("Closest hit:" + closestDist);
+
+    const directionVec3 = vec3.fromValues(direction[0], direction[1], direction[2]);
+    vec3.normalize(directionVec3, directionVec3);
+
+    const offset = vec3.create();
+    vec3.scale(offset, directionVec3, closestDist);
+
+    const hitPosition = vec3.create();
+    vec3.add(hitPosition, origin, offset);
+
     return {
         hit: closest != null,
         object: closest,
         distance: closestDist,
+        location: hitPosition,
     }
 
 }

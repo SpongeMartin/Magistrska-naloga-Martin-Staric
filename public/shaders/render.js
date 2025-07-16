@@ -91,9 +91,18 @@ export function renderingShader(device, computeShaders) {
         return array<vec3<f32>, 2>(minCorner, maxCorner);
     }
 
+    fn near_edge(pos: vec3<f32>, minimum: vec3<f32>, maximum: vec3<f32>, threshold: f32) -> bool {
+        let dx = min(abs(pos.x - minimum.x), abs(pos.x - maximum.x));
+        let dy = min(abs(pos.y - minimum.y), abs(pos.y - maximum.y));
+        let dz = min(abs(pos.z - minimum.z), abs(pos.z - maximum.z));
+
+        let count = u32(dx < threshold) + u32(dy < threshold) + u32(dz < threshold);
+        return count == 2u; // Near two planes = near edge
+    }
+
     @compute @workgroup_size(8, 8)
     fn compute(@builtin(global_invocation_id) globalId: vec3u) {
-        let nothing = uLightStepSize; // Just to avoid unused variable warning
+        let unusedUniform = uLightStepSize;
         let index = globalId.xy;
         let size = textureDimensions(texture);
         if (index.x >= size.x || index.y >= size.y) {
@@ -135,6 +144,12 @@ export function renderingShader(device, computeShaders) {
         }
         while (t < t_end) {
             let pos = cameraPosition + ray_dir * t;
+            let edge_highlight = near_edge(pos, cube_min, cube_max, 0.02);
+
+            if (edge_highlight) {
+                final_color = mix(final_color, vec3(1.0, 0.0, 0.0), 1.0); // Blend red
+            }
+
             let density = sample_texture(pos, cube_min, cube_max, smokeTexture, smokeSampler);
             let temperature = sample_texture(pos, cube_min, cube_max, temperatureTexture, temperatureSampler);
 

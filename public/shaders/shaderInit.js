@@ -7,8 +7,9 @@ import { velocityAdvectionShader } from "./velocity.js";
 import { renderingShader } from "./render.js";
 import { diffuseShader } from "./diffuse.js";
 import { debugShader } from "./debugShader.js";
-import { createBuffer, GridBuffer } from "../utils.js";
+import { createBuffer, GridBuffer, raycastAABBsFromCamera } from "../utils.js";
 import { buffers, allInstanceData } from "../init.js";
+import { vec3, vec4 } from "../glm.js";
 
 export function shaderInit(device, computeShaders) {
     explosionShader(device,computeShaders);
@@ -22,7 +23,7 @@ export function shaderInit(device, computeShaders) {
     debugShader(device,computeShaders);
 }
 
-export function explosionInstance(device, gridSize) {
+export function explosionInstance(device, gridSize, scene, camera) {
     const instanceBuffers = {};
     const instanceTextures = {};
 
@@ -71,7 +72,14 @@ export function explosionInstance(device, gridSize) {
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.STORAGE_BINDING,
     });
 
-    allInstanceData.push({instanceBuffers: instanceBuffers, instanceTextures:instanceTextures})
+    const calculateLocation = raycastAABBsFromCamera(scene, camera, 5);
+
+    console.log([...calculateLocation.location]);
+    // Define custom locations for later testing of multiple explosions - example.
+    //const customLoc = vec3.create(0.0, 3.0, -6.0);
+    //calculateLocation.location = customLoc;
+
+    allInstanceData.push({instanceBuffers: instanceBuffers, instanceTextures:instanceTextures, instanceLocation: calculateLocation.location})
 }
 
 export function initBuffers(device, gridSize){

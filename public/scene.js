@@ -91,10 +91,6 @@ export async function sceneInit(device, canvas, context, format){
     });
     
     console.log(scene);
-
-    const explosion = new Node();
-    explosion.addComponent(new Transform());
-    scene.addChild(explosion);
     
     return { renderer, scene, camera };
 }
